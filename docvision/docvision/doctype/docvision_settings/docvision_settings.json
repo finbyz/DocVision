@@ -1,0 +1,64 @@
+{
+ "actions": [],
+ "allow_rename": 1,
+ "creation": "2024-10-09 11:18:13.765186",
+ "doctype": "DocType",
+ "engine": "InnoDB",
+ "field_order": [
+  "api_key",
+  "default_model",
+  "column_break_birg",
+  "base_url"
+ ],
+ "fields": [
+  {
+   "fieldname": "api_key",
+   "fieldtype": "Password",
+   "in_list_view": 1,
+   "label": "API KEY",
+   "reqd": 1
+  },
+  {
+   "description": "select model supported by API",
+   "fieldname": "default_model",
+   "fieldtype": "Select",
+   "label": "Default Model",
+   "options": "\nllama3-8b-8192\nllama3-groq-70b-8192-tool-use-preview\nlama3-groq-8b-8192-tool-use-preview\nllama-3.1-70b-versatile\nwhisper-large-v3\ngemma2-9b-it\ngemma-7b-it\ngpt-4\ngpt-3.5-turbo\ntext-davinci-003\ntext-davinci-002\ncode-davinci-002"
+  },
+  {
+   "fieldname": "column_break_birg",
+   "fieldtype": "Column Break"
+  },
+  {
+   "default": "https://api.openai.com/v1",
+   "fieldname": "base_url",
+   "fieldtype": "Data",
+   "in_list_view": 1,
+   "label": "Base Url",
+   "reqd": 1
+  }
+ ],
+ "index_web_pages_for_search": 1,
+ "issingle": 1,
+ "links": [],
+ "modified": "2024-10-09 11:27:11.683380",
+ "modified_by": "Administrator",
+ "module": "Docvision",
+ "name": "DocVision Settings",
+ "owner": "Administrator",
+ "permissions": [
+  {
+   "create": 1,
+   "delete": 1,
+   "email": 1,
+   "print": 1,
+   "read": 1,
+   "role": "System Manager",
+   "share": 1,
+   "write": 1
+  }
+ ],
+ "sort_field": "modified",
+ "sort_order": "DESC",
+ "states": []
+}
