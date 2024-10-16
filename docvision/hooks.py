@@ -75,7 +75,7 @@ doctype_list_js = {
 # ------------
 
 # before_install = "docvision.install.before_install"
-# after_install = "docvision.install.after_install"
+after_install = "docvision.setup.install.after_install"
 
 # Uninstallation
 # ------------

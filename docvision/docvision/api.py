@@ -8,13 +8,28 @@ import requests
 from enum import Enum
 import frappe
 
-settings = frappe.get_single("DocVision Settings")
-base_url = settings.base_url
-api_key = settings.get_password("api_key")
-client = OpenAI(
-    base_url=base_url,
-    api_key=api_key, 
-)
+def get_openai_client():
+    settings = frappe.get_single("DocVision Settings")
+    base_url = settings.base_url
+    api_key = settings.get_password("api_key")
+    
+    if not base_url:
+        frappe.throw((
+            "Base URL is not set in DocVision Settings"
+            f"Please set the base URL in <a href='{settings.get_url()}'>DocVision Settings</a>"
+        ))
+    if not api_key:
+        frappe.throw((
+            "API Key is not set in DocVision Settings"
+            f"Please set the API key in <a href='{settings.get_url()}'>DocVision Settings</a>"
+        ))
+    
+    client = OpenAI(
+        base_url=base_url,
+        api_key=api_key, 
+    )
+    return client
+
 def get_text_from_image(file_id):
     name = frappe.db.get("File", {"file_url": file_id}).name
     content = frappe.get_doc("File", name).get_content()
@@ -127,6 +142,8 @@ contact_messages = [
 
 def extract_structured_data(text,output_schema,user_messages=None):
     user_messages = user_messages or []
+    client = get_openai_client()
+    settings = frappe.get_single("DocVision Settings")
     messages = [
                 {
                     "role": "system",
