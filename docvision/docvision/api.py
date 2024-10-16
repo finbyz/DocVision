@@ -155,6 +155,10 @@ def extract_structured_data(text,output_schema,user_messages=None):
                 },
                 {
                     "role": "assistant",
+                    "content": "if first_name is not available, use the company name as the first_name",
+                },
+                {
+                    "role": "assistant",
                     "content": "guess salutation based on the name here is a list of salutations: Prof, Master, Miss, Madam, Mrs, Dr, Mx, Ms, Mr",
                 },
                 {
@@ -171,7 +175,10 @@ def extract_structured_data(text,output_schema,user_messages=None):
         )
         json_response = json.loads(response.choices[0].message.content)
     except openai.RateLimitError as e:
-        print("Rate limit error:", e)
+        frappe.throw("Rate limit error")
+        return
+    except Exception as e:
+        frappe.throw("We are unable to extract structured data from the image. Please try again later.")
         return None
     
     return json_response

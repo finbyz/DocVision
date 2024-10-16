@@ -9,7 +9,8 @@ readme = "README.md"
 dynamic = ["version"]
 dependencies = [
     # "frappe~=15.0.0" # Installed and managed by bench.
-    "openai~=1.51.0"
+    "openai~=1.51.0",
+    "pytesseract~=0.3.13"
 ]
 
 [build-system]
