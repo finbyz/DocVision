@@ -10,16 +10,21 @@ def get_contact_with_domain_or_email(data):
     try:
         # Safe attribute access for Pydantic
         primary_email = data.email_ids[0].email_id if data.email_ids and len(data.email_ids) > 0 else None
+        primary_phone = data.phone_nos[0].phone if data.phone_nos and len(data.phone_nos) > 0 else None
         company_domain = getattr(data, 'company_domain', None) or getattr(data, 'website', None)
         
-        # STEP 1: Check by email
+        # Normalize email
         if primary_email:
-            contact = frappe.get_all(
-                "Contact Email",
-                filters={"email_id": primary_email},
-                fields=["parent"],
-                limit=1
-            )
+            primary_email = primary_email.lower().strip()
+        
+        # STEP 1: Check by email (case-insensitive, exact match)
+        if primary_email:
+            contact = frappe.db.sql("""
+                SELECT DISTINCT parent
+                FROM `tabContact Email`
+                WHERE LOWER(email_id) = %s
+                LIMIT 1
+            """, (primary_email,), as_dict=True)
             
             if contact:
                 contact_doc = frappe.get_doc("Contact", contact[0].parent)
@@ -31,6 +36,7 @@ def get_contact_with_domain_or_email(data):
                 for link in contact_doc.links:
                     if link.link_doctype == "Customer":
                         customer_link = link
+                        break  # Prioritize Customer
                     elif link.link_doctype == "Lead":
                         lead_link = link
                 
@@ -55,27 +61,29 @@ def get_contact_with_domain_or_email(data):
                         "party_name": lead.name,
                         "party_display": lead.lead_name or lead.company_name
                     }
+                    
+                return {
+                    "status": "success",
+                    "with_domain": bool(company_domain),
+                    "contact": contact_doc,
+                    "party_type": None,
+                    "party_name": None,
+                    "party_display": contact_doc.first_name or contact_doc.name
+                }
         
-        # STEP 2: Check by company domain (if email not found)
-        if company_domain:
-            # Clean domain
-            domain = company_domain.lower()
-            domain = domain.replace('http://', '').replace('https://', '')
-            domain = domain.replace('www.', '').strip('/')
-            domain = domain.split('/')[0]
+        # STEP 2: Check by phone (if email not found)
+        if primary_phone:
+            normalized_phone = primary_phone.strip()
             
-            # Better matching - check both company name and email domain
-            contacts = frappe.db.sql("""
-                SELECT DISTINCT c.name
-                FROM `tabContact` c
-                LEFT JOIN `tabContact Email` ce ON ce.parent = c.name
-                WHERE (LOWER(c.company_name) LIKE %s 
-                       OR LOWER(ce.email_id) LIKE %s)
+            contact = frappe.db.sql("""
+                SELECT DISTINCT parent
+                FROM `tabContact Phone`
+                WHERE phone = %s
                 LIMIT 1
-            """, (f"%{domain}%", f"%@{domain}%"), as_dict=True)
+            """, (normalized_phone,), as_dict=True)
             
-            if contacts:
-                contact_doc = frappe.get_doc("Contact", contacts[0].name)
+            if contact:
+                contact_doc = frappe.get_doc("Contact", contact[0].parent)
                 
                 customer_link = None
                 lead_link = None
@@ -83,6 +91,7 @@ def get_contact_with_domain_or_email(data):
                 for link in contact_doc.links:
                     if link.link_doctype == "Customer":
                         customer_link = link
+                        break
                     elif link.link_doctype == "Lead":
                         lead_link = link
                 
@@ -90,7 +99,7 @@ def get_contact_with_domain_or_email(data):
                     customer = frappe.get_doc("Customer", customer_link.link_name)
                     return {
                         "status": "success",
-                        "with_domain": True,
+                        "with_domain": bool(company_domain),
                         "contact": contact_doc,
                         "party_type": "Customer",
                         "party_name": customer.name,
@@ -101,25 +110,106 @@ def get_contact_with_domain_or_email(data):
                     lead = frappe.get_doc("Lead", lead_link.link_name)
                     return {
                         "status": "success",
-                        "with_domain": True,
+                        "with_domain": bool(company_domain),
                         "contact": contact_doc,
                         "party_type": "Lead",
                         "party_name": lead.name,
                         "party_display": lead.lead_name or lead.company_name
                     }
+                    
+                return {
+                    "status": "success",
+                    "with_domain": bool(company_domain),
+                    "contact": contact_doc,
+                    "party_type": None,
+                    "party_name": None,
+                    "party_display": contact_doc.first_name or contact_doc.name
+                }
         
+        # STEP 3: Check by company domain (only if email AND phone not found)
+        if company_domain and not primary_email:
+            # Clean domain
+            domain = company_domain.lower()
+            domain = domain.replace('http://', '').replace('https://', '')
+            domain = domain.replace('www.', '').strip('/')
+            domain = domain.split('/')[0]
+            domain = domain.split(':')[0]  # Remove port
+            
+            if domain:
+                # FIXED: Only match exact domain in email addresses
+                # Removed company_name LIKE which was too broad
+                contacts = frappe.db.sql("""
+                    SELECT DISTINCT c.name
+                    FROM `tabContact` c
+                    INNER JOIN `tabContact Email` ce ON ce.parent = c.name
+                    WHERE LOWER(ce.email_id) LIKE %s
+                    LIMIT 1
+                """, (f"%@{domain}",), as_dict=True)
+                
+                if contacts:
+                    contact_doc = frappe.get_doc("Contact", contacts[0].name)
+                    
+                    customer_link = None
+                    lead_link = None
+                    
+                    for link in contact_doc.links:
+                        if link.link_doctype == "Customer":
+                            customer_link = link
+                            break
+                        elif link.link_doctype == "Lead":
+                            lead_link = link
+                    
+                    if customer_link:
+                        customer = frappe.get_doc("Customer", customer_link.link_name)
+                        return {
+                            "status": "success",
+                            "with_domain": True,
+                            "contact": contact_doc,
+                            "party_type": "Customer",
+                            "party_name": customer.name,
+                            "party_display": customer.customer_name
+                        }
+                    
+                    if lead_link:
+                        lead = frappe.get_doc("Lead", lead_link.link_name)
+                        return {
+                            "status": "success",
+                            "with_domain": True,
+                            "contact": contact_doc,
+                            "party_type": "Lead",
+                            "party_name": lead.name,
+                            "party_display": lead.lead_name or lead.company_name
+                        }
+                    
+                    return {
+                        "status": "success",
+                        "with_domain": True,
+                        "contact": contact_doc,
+                        "party_type": None,
+                        "party_name": None,
+                        "party_display": contact_doc.first_name or contact_doc.name
+                    }
+        
+        # No match found
         return {
             "status": "success",
             "with_domain": False,
-            "contact": None
+            "contact": None,
+            "party_type": None,
+            "party_name": None,
+            "party_display": None
         }
         
     except Exception as e:
         frappe.log_error(str(e), "Get Contact Error")
+        
         return {
             "status": "error",
             "with_domain": False,
-            "contact": None
+            "contact": None,
+            "party_type": None,
+            "party_name": None,
+            "party_display": None
         }
 
 
@@ -129,14 +219,28 @@ def find_customer_by_company_name(company_name):
         return None
     
     try:
+        # Try exact match first
+        customer = frappe.db.get_value(
+            "Customer",
+            {"customer_name": company_name},
+            ["name", "customer_name"],
+            as_dict=True
+        )
+        
+        if customer:
+            return customer
+        
+        # Fall back to partial match
         customer = frappe.db.get_value(
             "Customer",
             {"customer_name": ["like", f"%{company_name}%"]},
             ["name", "customer_name"],
-            as_dict=True
+            as_dict=True,
+            order_by="modified desc"
         )
         return customer
-    except:
+    except Exception as e:
+        frappe.log_error(str(e), "Find Customer Error")
         return None
 
 
@@ -146,14 +250,29 @@ def find_lead_by_company_name(company_name):
         return None
     
     try:
+        # Try exact match first
+        leads = frappe.db.sql("""
+            SELECT name, company_name, lead_name
+            FROM `tabLead`
+            WHERE company_name = %s
+            AND status != 'Converted'
+            LIMIT 1
+        """, (company_name,), as_dict=True)
+        
+        if leads:
+            return leads[0]
+        
+        # Fall back to partial match
         leads = frappe.db.sql("""
             SELECT name, company_name, lead_name
             FROM `tabLead`
             WHERE company_name LIKE %s
             AND status != 'Converted'
+            ORDER BY modified DESC
             LIMIT 1
         """, (f"%{company_name}%",), as_dict=True)
         
         return leads[0] if leads else None
-    except:
+    except Exception as e:
+        frappe.log_error(str(e), "Find Lead Error")
         return None
