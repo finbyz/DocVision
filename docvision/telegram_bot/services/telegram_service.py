@@ -5,6 +5,40 @@ Handles all communication with Telegram API
 import frappe
 import requests
 from frappe import _
+from requests.adapters import HTTPAdapter
+from urllib3.util.retry import Retry
+import socket
+
+# Force IPv4 to avoid "Network is unreachable" errors
+# This happens when IPv6 is preferred but not properly configured
+original_getaddrinfo = socket.getaddrinfo
+
+def forced_ipv4_getaddrinfo(*args, **kwargs):
+    """Force IPv4 address resolution"""
+    responses = original_getaddrinfo(*args, **kwargs)
+    return [r for r in responses if r[0] == socket.AF_INET] or responses
+
+# Apply IPv4 monkey patch
+socket.getaddrinfo = forced_ipv4_getaddrinfo
+
+
+def get_telegram_session():
+    """Create a requests session with retry logic and timeouts"""
+    session = requests.Session()
+    
+    # Retry strategy: 3 retries with backoff
+    retry_strategy = Retry(
+        total=3,
+        backoff_factor=1,  # 1s, 2s, 4s
+        status_forcelist=[429, 500, 502, 503, 504],
+        allowed_methods=["GET", "POST"]
+    )
+    
+    adapter = HTTPAdapter(max_retries=retry_strategy)
+    session.mount("https://", adapter)
+    session.mount("http://", adapter)
+    
+    return session
 
 
 def get_telegram_image_url(file_id):
@@ -16,10 +50,11 @@ def get_telegram_image_url(file_id):
         if not bot_token:
             return None
         
-        file_info_response = requests.get(
+        session = get_telegram_session()
+        file_info_response = session.get(
             f"https://api.telegram.org/bot{bot_token}/getFile",
             params={"file_id": file_id},
-            timeout=15
+            timeout=(10, 30)  # (connect timeout, read timeout)
         )
         
         file_info = file_info_response.json()
@@ -33,9 +68,13 @@ def get_telegram_image_url(file_id):
         return image_url
         
     except requests.exceptions.Timeout:
+        frappe.log_error(title="Telegram Timeout", message=f"Timeout getting file: {file_id}")
+        return None
+    except requests.exceptions.ConnectionError as e:
+        frappe.log_error(title="Telegram Connection Error", message=f"Connection error: {str(e)[:200]}")
         return None
     except Exception as e:
-        frappe.log_error(str(e), "Get Telegram Image Error")
+        frappe.log_error(title="Telegram Image Error", message=str(e)[:500])
         return None
 
 
@@ -46,13 +85,14 @@ def send_telegram_message(chat_id, text):
         bot_token = telegram_setting.get_password("telegram_bot_token")
         
         if not bot_token:
-            frappe.log_error("Bot token not found in Telegram Setting", "Telegram Send Error")
+            frappe.log_error(title="Telegram Send Error", message="Bot token not found")
             return
         
         bot_token = bot_token.strip()
         url = f"https://api.telegram.org/bot{bot_token}/sendMessage"
         
-        response = requests.post(
+        session = get_telegram_session()
+        response = session.post(
             url,
             json={
                 "chat_id": chat_id,
@@ -60,25 +100,24 @@ def send_telegram_message(chat_id, text):
                 "parse_mode": "HTML",
                 "disable_web_page_preview": True
             },
-            timeout=10
+            timeout=(10, 30)  # (connect timeout, read timeout)
         )
         
         if response.status_code != 200:
             frappe.log_error(
-                f"Failed to send message.\n"
-                f"Status: {response.status_code}\n"
-                f"URL: {url}\n"
-                f"Response: {response.text}\n"
-                f"Chat ID: {chat_id}", 
-                "Telegram Send Error"
+                title="Telegram Send Error",
+                message=f"Status: {response.status_code}\nChat: {chat_id}\nResponse: {response.text[:200]}"
             )
         
+    except requests.exceptions.ConnectionError as e:
+        frappe.log_error(
+            title="Telegram Connection Error",
+            message=f"Chat: {chat_id}\nError: {str(e)[:300]}"
+        )
     except Exception as e:
         frappe.log_error(
-            f"Exception: {str(e)}\n"
-            f"Chat ID: {chat_id}\n"
-            f"Message: {text[:100] if text else 'Empty'}", 
-            "Telegram Send Error"
+            title="Telegram Send Error",
+            message=f"Chat: {chat_id}\nError: {str(e)[:300]}"
         )
 
 
@@ -94,9 +133,10 @@ def get_webhook_info():
                 "message": "Bot token not found"
             }
         
-        info_response = requests.get(
+        session = get_telegram_session()
+        info_response = session.get(
             f"https://api.telegram.org/bot{bot_token}/getWebhookInfo",
-            timeout=10
+            timeout=(10, 30)
         )
         
         webhook_info = info_response.json()
@@ -117,9 +157,14 @@ def get_webhook_info():
                 "message": webhook_info.get('description', 'Failed to get webhook info')
             }
             
-    except Exception as e:
-        frappe.log_error(str(e), "Get Webhook Info Error")
+    except requests.exceptions.ConnectionError as e:
         return {
             "success": False,
-            "message": str(e)
+            "message": f"Connection error: {str(e)[:200]}"
+        }
+    except Exception as e:
+        frappe.log_error(title="Webhook Info Error", message=str(e)[:500])
+        return {
+            "success": False,
+            "message": str(e)[:200]
         }

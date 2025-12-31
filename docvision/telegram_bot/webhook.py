@@ -5,13 +5,11 @@ Entry point for all incoming Telegram messages
 import frappe
 import json
 from frappe import _
-from docvision.telegram_bot.handlers.message_handler import handle_private_message, handle_group_message
-from docvision.telegram_bot.services.telegram_service import send_telegram_message
 
 
 @frappe.whitelist(allow_guest=True)
 def telegram_webhook():
-    """Main webhook endpoint for Telegram"""
+    """Main webhook endpoint for Telegram - responds immediately and processes in background"""
     try:
         # Get incoming data
         data = frappe.request.get_json()
@@ -24,22 +22,54 @@ def telegram_webhook():
         if not chat_id:
             return {"status": "error", "message": "No chat_id"}
         
-        # Route to appropriate handler
-        if chat_type in ['group', 'supergroup', 'channel']:
-            return handle_group_message(message, chat_id)
-        else:
-            return handle_private_message(message, chat_id)
+        # Enqueue processing in background
+        frappe.enqueue(
+            "docvision.telegram_bot.webhook.process_telegram_message",
+            queue="short",
+            message=message,
+            chat_id=chat_id,
+            chat_type=chat_type,
+            enqueue_after_commit=True
+        )
+        
+        # Respond immediately to Telegram
+        return {"status": "ok", "message": "Processing in background"}
         
     except Exception as e:
         frappe.log_error(str(e), "Telegram Webhook Error")
+        return {"status": "error", "message": str(e)}
+
+
+def process_telegram_message(message, chat_id, chat_type):
+    """Background job to process Telegram message"""
+    from docvision.telegram_bot.handlers.message_handler import handle_private_message, handle_group_message
+    from docvision.telegram_bot.services.telegram_service import send_telegram_message
+    
+    try:
+        # Route to appropriate handler
+        if chat_type in ['group', 'supergroup', 'channel']:
+            handle_group_message(message, chat_id)
+        else:
+            handle_private_message(message, chat_id)
+            
+    except Exception as e:
+        # Safe error logging - truncate to prevent cascade failures
+        error_msg = str(e)[:500] if len(str(e)) > 500 else str(e)
+        try:
+            frappe.log_error(
+                title="Telegram Processing Error",
+                message=f"Chat ID: {chat_id}\nError: {error_msg}"
+            )
+        except:
+            pass  # Silently fail if logging fails
         
-        if 'chat_id' in locals() and chat_id:
+        try:
             send_telegram_message(
                 chat_id, 
-                f"⚠️ System Error\n\n{str(e)}\n\nPlease contact support."
+                f"⚠️ System Error\n\nPlease try again later or contact support."
             )
-        
-        return {"status": "error", "message": str(e)}
+        except:
+            pass  # Don't fail if error notification fails
 
 
 @frappe.whitelist()

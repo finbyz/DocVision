@@ -57,14 +57,20 @@ def create_contact_with_party(data, party_type, party_name):
     
     # No existing contact - create new one
     try:
+        # Helper to ensure we get string values, not lists
+        def safe_str(value):
+            if isinstance(value, list):
+                return value[0] if value else None
+            return value
+        
         contact = frappe.get_doc({
             "doctype": "Contact",
-            "first_name": getattr(data, 'first_name', '') or '',
-            "last_name": getattr(data, 'last_name', '') or '',
-            "salutation": getattr(data, 'salutation', None),
-            "gender": getattr(data, 'gender', None),
-            "designation": getattr(data, 'designation', None),
-            "company_name": getattr(data, 'company_name', None),
+            "first_name": safe_str(getattr(data, 'first_name', '')) or '',
+            "last_name": safe_str(getattr(data, 'last_name', '')) or '',
+            "salutation": safe_str(getattr(data, 'salutation', None)),
+            "gender": safe_str(getattr(data, 'gender', None)),
+            "designation": safe_str(getattr(data, 'designation', None)),
+            "company_name": safe_str(getattr(data, 'company_name', None)),
             "status": "Passive"
         })
         
@@ -83,23 +89,18 @@ def create_contact_with_party(data, party_type, party_name):
                 'is_primary_mobile_no': 1
             })
         
-        # Add address if available
-        if hasattr(data, 'address') and data.address:
-            contact.append('address', {
-                'address_type': 'Office',
-                'address_line1': getattr(data.address, 'address_line1', None),
-                'address_line2': getattr(data.address, 'address_line2', None),
-                'city': getattr(data.address, 'city', None),
-                'state': getattr(data.address, 'state', None),
-                'pincode': getattr(data.address, 'pincode', None),
-                'country': getattr(data.address, 'country', None) or 'India',
-                'is_primary_address': 1
-            })
+        # Note: Contact doesn't have an embedded address child table
+        # Addresses should be linked separately if needed
+        
+        # Ensure party_name is a string, not a list
+        if isinstance(party_name, list):
+            party_name = party_name[0] if party_name else ''
+            frappe.log_error("Contact Creation Warning", f"party_name was a list: {party_name}")
         
         # Link to party
         contact.append('links', {
             'link_doctype': party_type,
-            'link_name': party_name
+            'link_name': str(party_name) if party_name else ''
         })
         
         contact.insert(ignore_permissions=True)
@@ -179,6 +180,12 @@ def create_lead_from_data(data):
     # No existing lead - create new one
     source_name = get_or_create_lead_source("Telegram Bot")
     
+    # Validate lead type - must be one of the valid options
+    valid_lead_types = [" ", "Key Account", "Large Customer", "Medium Customer", "Small Customer"]
+    lead_type = getattr(data, 'type', None) or getattr(data, 'lead_type', None)
+    if not lead_type or lead_type not in valid_lead_types:
+        lead_type = " "  # Default to space if empty or invalid
+    
     lead_data = {
         "doctype": "Lead",
         "first_name": getattr(data, 'first_name', '') or '',
@@ -189,7 +196,8 @@ def create_lead_from_data(data):
         "company_name": getattr(data, 'company_name', None),
         "email_id": primary_email.lower().strip() if primary_email else None,
         "phone": primary_phone.strip() if primary_phone else None,
-        "website": getattr(data, 'website', None) or getattr(data, 'company_domain', None)
+        "website": getattr(data, 'website', None) or getattr(data, 'company_domain', None),
+        "type": lead_type
     }
     
     if source_name:
@@ -205,7 +213,9 @@ def create_lead_from_data(data):
         lead.state = getattr(data.address, 'state', None)
         lead.pincode = getattr(data.address, 'pincode', None)
         lead.country = getattr(data.address, 'country', None) or 'India'
-    
+    lead.type = lead_type
+    frappe.log_error("Lead Data", str(lead.as_json()))
+    lead.ignore_validate = True
     lead.insert(ignore_permissions=True)
     frappe.db.commit()
     

@@ -76,5 +76,5 @@ def process_contact_or_lead(data):
         }
         
     except Exception as e:
-        frappe.log_error(str(e), "Contact/Lead Flow Error")
+        frappe.log_error("Contact/Lead Flow Error", frappe.get_traceback())
         return {"success": False, "message": f"Error: {str(e)}"}

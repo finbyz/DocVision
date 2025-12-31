@@ -6,7 +6,23 @@
 
 import frappe
 import requests
+from requests.adapters import HTTPAdapter
+from urllib3.util.retry import Retry
 from frappe.model.document import Document
+
+
+def get_telegram_session():
+    """Create a requests session with retry logic for Telegram API"""
+    session = requests.Session()
+    retries = Retry(
+        total=3,
+        backoff_factor=1,
+        status_forcelist=[500, 502, 503, 504],
+        allowed_methods=["GET", "POST"]
+    )
+    adapter = HTTPAdapter(max_retries=retries)
+    session.mount("https://", adapter)
+    return session
 
 class TelegramSetting(Document):
     def on_update(self):
@@ -28,9 +44,9 @@ class TelegramSetting(Document):
                 return
             
             # Step 1: Remove existing webhook
-            remove_response = requests.get(
+            session = get_telegram_session()
+            remove_response = session.get(
                 f"https://api.telegram.org/bot{bot_token}/deleteWebhook",
-                timeout=10
             )
             
             if remove_response.status_code == 200:
@@ -49,10 +65,9 @@ class TelegramSetting(Document):
                     title="Configuration Error"
                 )
                         
-            set_response = requests.get(
+            set_response = session.get(
                 f"https://api.telegram.org/bot{bot_token}/setWebhook",
                 params={"url": webhook_url},
-                timeout=10
             )
             
             response_data = set_response.json()
@@ -107,3 +122,53 @@ class TelegramSetting(Document):
             site_url = site_url.replace('http://', 'https://')
         webhook_url = f"{site_url}/api/method/docvision.telegram_bot.webhook.telegram_webhook"
         return webhook_url
+
+    @frappe.whitelist()
+    def disconnect_webhook(self):
+        """Remove Telegram webhook"""
+        try:
+            bot_token = self.get_password("telegram_bot_token")
+            
+            if not bot_token:
+                frappe.msgprint(
+                    "Bot token not found. Please add bot token first.",
+                    title="Disconnect Failed",
+                    indicator="red"
+                )
+                return
+            
+            session = get_telegram_session()
+            remove_response = session.get(
+                f"https://api.telegram.org/bot{bot_token}/deleteWebhook",
+            )
+            
+            response_data = remove_response.json()
+            
+            if remove_response.status_code == 200 and response_data.get('ok'):
+                frappe.msgprint(
+                    "✅ Webhook disconnected successfully!",
+                    title="Telegram Webhook",
+                    indicator="green"
+                )
+            else:
+                error_msg = response_data.get('description', 'Unknown error')
+                frappe.msgprint(
+                    f"❌ Failed to disconnect webhook: {error_msg}",
+                    title="Disconnect Failed",
+                    indicator="red"
+                )
+                
+        except requests.exceptions.Timeout:
+            frappe.msgprint(
+                "⚠️ Telegram API timeout. Please try again.",
+                title="Disconnect Failed",
+                indicator="orange"
+            )
+            
+        except Exception as e:
+            frappe.log_error(str(e), "Telegram Webhook Disconnect Error")
+            frappe.msgprint(
+                f"❌ Error: {str(e)}",
+                title="Disconnect Failed",
+                indicator="red"
+            )
