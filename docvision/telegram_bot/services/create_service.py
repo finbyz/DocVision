@@ -70,7 +70,7 @@ def create_contact_with_party(data, party_type, party_name):
             "salutation": safe_str(getattr(data, 'salutation', None)),
             "gender": safe_str(getattr(data, 'gender', None)),
             "designation": safe_str(getattr(data, 'designation', None)),
-            "company_name": safe_str(getattr(data, 'company_name', None)),
+            "company_name": safe_str(getattr(data, 'company_name', "Unknown Company")),
             "status": "Passive"
         })
         
@@ -193,10 +193,11 @@ def create_lead_from_data(data):
         "salutation": getattr(data, 'salutation', None),
         "gender": getattr(data, 'gender', None),
         "designation": getattr(data, 'designation', None),
-        "company_name": getattr(data, 'company_name', None),
+        "company_name": getattr(data, 'company_name', None) or "Unknown Company",
         "email_id": primary_email.lower().strip() if primary_email else None,
         "phone": primary_phone.strip() if primary_phone else None,
         "website": getattr(data, 'website', None) or getattr(data, 'company_domain', None),
+        "industry": getattr(data, 'industry', None) or "Other",
         "type": lead_type
     }
     
@@ -216,6 +217,7 @@ def create_lead_from_data(data):
     lead.type = lead_type
     frappe.log_error("Lead Data", str(lead.as_json()))
     lead.ignore_validate = True
+    lead.territory = getattr(data, 'territory', "Other Territory")
     lead.insert(ignore_permissions=True)
     frappe.db.commit()
     
