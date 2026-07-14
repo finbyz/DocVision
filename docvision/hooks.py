@@ -3,8 +3,8 @@ app_title = "Docvision"
 app_publisher = "Finbyz"
 app_description = "DocVision"
 app_email = "info@finbyz.tech"
-app_license = "mit"
-# required_apps = []
+app_license = "gpl-3.0"
+required_apps = ["finbyz/finbyzai"]
 
 # Includes in <head>
 # ------------------
