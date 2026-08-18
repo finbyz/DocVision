@@ -4,6 +4,7 @@ Handles all contact/lead creation and management logic
 """
 from docvision.telegram_bot.utils.formatters import (
     format_existing_party_message,
+    format_existing_contact_message,
     format_contact_created_with_party_message,
     format_new_lead_and_contact_message
 )
@@ -39,6 +40,12 @@ def process_contact_or_lead(data):
         if contact_result.get('status') == 'success' and contact_result.get('contact'):
             if contact_result.get('with_domain'):
                 # Contact exists - Return existing
+                if not contact_result.get('party_type') or not contact_result.get('party_name'):
+                    return {
+                        "success": True,
+                        "message": format_existing_contact_message(contact_result['contact'])
+                    }
+
                 return {
                     "success": True,
                     "message": format_existing_party_message(
