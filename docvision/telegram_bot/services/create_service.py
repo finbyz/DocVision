@@ -1,6 +1,8 @@
 
 import frappe
 
+from docvision.telegram_bot.utils.logging import log_exception
+
 
 def create_address_for_party(data, party_type, party_name, address_title):
     """Create an Address linked to the same party as the Contact."""
@@ -258,5 +260,5 @@ def get_or_create_lead_source(source_name):
         return source_field, source_name
 
     except Exception:
-        frappe.log_error(frappe.get_traceback(), "Lead Source Creation Error")
+        log_exception("Lead Source Creation Error", source_name=source_name)
         return "utm_source", None

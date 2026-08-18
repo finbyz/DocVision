@@ -2,7 +2,8 @@
 Search service for finding existing contacts, customers, and leads
 """
 import frappe
-from frappe import _
+
+from docvision.telegram_bot.utils.logging import log_exception
 
 
 def get_contact_with_domain_or_email(data):
@@ -200,8 +201,13 @@ def get_contact_with_domain_or_email(data):
             "party_display": None
         }
         
-    except Exception as e:
-        frappe.log_error(str(e), "Get Contact Error")
+    except Exception:
+        log_exception(
+            "Get Contact Error",
+            lookup_email=bool(primary_email) if "primary_email" in locals() else False,
+            lookup_phone=bool(primary_phone) if "primary_phone" in locals() else False,
+            lookup_domain=bool(company_domain) if "company_domain" in locals() else False,
+        )
         
         return {
             "status": "error",
@@ -239,9 +245,9 @@ def find_customer_by_company_name(company_name):
             order_by="modified desc"
         )
         return customer
-    except Exception as e:
-        frappe.log_error(str(e), "Find Customer Error")
-        return None
+    except Exception:
+        log_exception("Find Customer Error", lookup_type="company_name")
+        raise
 
 
 def find_lead_by_company_name(company_name):
@@ -273,6 +279,6 @@ def find_lead_by_company_name(company_name):
         """, (f"%{company_name}%",), as_dict=True)
         
         return leads[0] if leads else None
-    except Exception as e:
-        frappe.log_error(str(e), "Find Lead Error")
-        return None
+    except Exception:
+        log_exception("Find Lead Error", lookup_type="company_name")
+        raise
