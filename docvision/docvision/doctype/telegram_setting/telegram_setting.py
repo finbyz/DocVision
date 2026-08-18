@@ -8,6 +8,9 @@ import frappe
 import requests
 from frappe.model.document import Document
 
+from docvision.telegram_bot.utils.logging import log_error, log_exception
+
+
 class TelegramSetting(Document):
     def on_update(self):
         """Remove and re-register Telegram webhook on update"""
@@ -19,7 +22,7 @@ class TelegramSetting(Document):
             bot_token = self.get_password("telegram_bot_token")
             
             if not bot_token:
-                frappe.log_error("No bot token found", "Telegram Webhook Setup")
+                log_error("Telegram Webhook Setup", "No bot token configured")
                 frappe.msgprint(
                     " Bot token not found. Please add bot token first.",
                     title="Webhook Setup Failed",
@@ -36,9 +39,11 @@ class TelegramSetting(Document):
             if remove_response.status_code == 200:
                 frappe.logger().info("Telegram webhook removed successfully")
             else:
-                frappe.log_error(
-                    f"Failed to remove webhook: {remove_response.text}", 
-                    "Telegram Webhook Removal"
+                log_error(
+                    "Telegram Webhook Removal",
+                    "Telegram API rejected deleteWebhook request",
+                    http_status=remove_response.status_code,
+                    telegram_response=remove_response.text,
                 )
             
             webhook_url = self.get_webhook_url()
@@ -76,17 +81,17 @@ class TelegramSetting(Document):
                 )
                 
         except requests.exceptions.Timeout:
-            frappe.log_error("Telegram API timeout", "Telegram Webhook Setup")
+            log_exception("Telegram Webhook Setup Timeout")
             frappe.msgprint(
                 "⚠️ Telegram API timeout. Please try again.",
                 title="Webhook Setup",
                 indicator="orange"
             )
             
-        except Exception as e:
-            frappe.log_error(str(e), "Telegram Webhook Setup Error")
+        except Exception:
+            log_exception("Telegram Webhook Setup Error")
             frappe.msgprint(
-                f"❌ Error: {str(e)}",
+                "❌ Unable to configure the webhook. Check Error Log for details.",
                 title="Webhook Setup Failed",
                 indicator="red"
             )

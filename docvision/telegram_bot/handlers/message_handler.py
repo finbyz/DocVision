@@ -2,18 +2,16 @@
 Message handlers for different chat types
 Handles private and group messages
 """
-import frappe
-from frappe import _
 from docvision.telegram_bot.services.telegram_service import send_telegram_message, get_telegram_image_url
 from docvision.telegram_bot.services.ai_service import process_business_card_with_context
 from docvision.telegram_bot.services.contact_service import process_contact_or_lead
+from docvision.telegram_bot.utils.logging import log_exception
 from docvision.telegram_bot.utils.validators import is_valid_extraction
 
 
 def handle_private_message(message, chat_id):
     """Handle messages from private chats"""
     try:
-        telegram_user_id = message.get('from', {}).get('id')
         user_name = message.get('from', {}).get('first_name', 'User')
         
         # Handle /start command
@@ -35,9 +33,13 @@ def handle_private_message(message, chat_id):
         # Process the business card
         return process_business_card_image(message, chat_id)
         
-    except Exception as e:
-        frappe.log_error(str(e), "Private Message Error")
-        return {"status": "error", "message": str(e)}
+    except Exception:
+        log_exception(
+            "Private Message Error",
+            chat_id=chat_id,
+            message_id=message.get("message_id"),
+        )
+        return {"status": "error", "message": "Unable to process private message"}
 
 
 def handle_group_message(message, chat_id):
@@ -51,13 +53,19 @@ def handle_group_message(message, chat_id):
         # Process the business card
         return process_business_card_image(message, chat_id, text_message)
         
-    except Exception as e:
-        frappe.log_error(str(e), "Group Message Error")
-        return {"status": "error", "message": str(e)}
+    except Exception:
+        log_exception(
+            "Group Message Error",
+            chat_id=chat_id,
+            message_id=message.get("message_id"),
+        )
+        return {"status": "error", "message": "Unable to process group message"}
 
 
 def process_business_card_image(message, chat_id, text_context=""):
     """Common logic for processing business card images"""
+    stage = "image_selection"
+
     try:
         # Get photo file_id
         photo = message['photo'][-1] 
@@ -67,6 +75,7 @@ def process_business_card_image(message, chat_id, text_context=""):
         send_telegram_message(chat_id, "⏳ Please Wait, we are processing your card...")
         
         # Get direct image URL from Telegram
+        stage = "image_download"
         image_url = get_telegram_image_url(file_id)
         
         if not image_url:
@@ -78,6 +87,7 @@ def process_business_card_image(message, chat_id, text_context=""):
         
         # Extract data from image
         send_telegram_message(chat_id, "🔍 Analyzing business card...")
+        stage = "ai_extraction"
         structured_data = process_business_card_with_context(image_url, text_context)
         
         # Validate extraction
@@ -95,6 +105,7 @@ def process_business_card_image(message, chat_id, text_context=""):
         
         # Process Contact/Lead
         send_telegram_message(chat_id, "💾 Creating contact/lead...")
+        stage = "contact_lead_processing"
         result = process_contact_or_lead(structured_data)
         
         # Send final result
@@ -108,10 +119,15 @@ def process_business_card_image(message, chat_id, text_context=""):
         
         return {"status": "success"}
         
-    except Exception as e:
-        frappe.log_error(str(e), "Business Card Processing Error")
+    except Exception:
+        log_exception(
+            "Business Card Processing Error",
+            chat_id=chat_id,
+            message_id=message.get("message_id"),
+            stage=stage,
+        )
         send_telegram_message(
             chat_id, 
-            f"⚠️ Processing Error\n\n{str(e)}\n\nPlease try again."
+            "⚠️ Processing error. Please try again."
         )
-        return {"status": "error", "message": str(e)}
+        return {"status": "error", "message": "Unable to process business card"}

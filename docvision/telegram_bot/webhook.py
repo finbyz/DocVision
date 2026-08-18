@@ -3,20 +3,21 @@ Main webhook handler for Telegram bot
 Entry point for all incoming Telegram messages
 """
 import frappe
-import json
-from frappe import _
 from docvision.telegram_bot.handlers.message_handler import handle_private_message, handle_group_message
 from docvision.telegram_bot.services.telegram_service import send_telegram_message
+from docvision.telegram_bot.utils.logging import log_exception
 
 
 @frappe.whitelist(allow_guest=True)
 def telegram_webhook():
     """Main webhook endpoint for Telegram"""
+    chat_id = None
+    update_id = None
+
     try:
         # Get incoming data
         data = frappe.request.get_json()
-        frappe.log_error("Telegram Webhook Data", json.dumps(data))
-        
+        update_id = data.get("update_id")
         message = data.get('message', {})
         chat_id = message.get('chat', {}).get('id')
         chat_type = message.get('chat', {}).get('type')
@@ -30,16 +31,20 @@ def telegram_webhook():
         else:
             return handle_private_message(message, chat_id)
         
-    except Exception as e:
-        frappe.log_error(str(e), "Telegram Webhook Error")
+    except Exception:
+        log_exception(
+            "Telegram Webhook Error",
+            chat_id=chat_id,
+            update_id=update_id,
+        )
         
-        if 'chat_id' in locals() and chat_id:
+        if chat_id:
             send_telegram_message(
                 chat_id, 
-                f"⚠️ System Error\n\n{str(e)}\n\nPlease contact support."
+                "⚠️ System error. Please try again or contact support."
             )
         
-        return {"status": "error", "message": str(e)}
+        return {"status": "error", "message": "Unable to process webhook"}
 
 
 @frappe.whitelist()
@@ -54,11 +59,11 @@ def setup_webhook_manual():
             "message": "Webhook setup triggered successfully"
         }
         
-    except Exception as e:
-        frappe.log_error(str(e), "Manual Webhook Setup Error")
+    except Exception:
+        log_exception("Manual Webhook Setup Error")
         return {
             "success": False,
-            "message": str(e)
+            "message": "Unable to configure the webhook"
         }
 
 
@@ -67,11 +72,12 @@ def get_webhook_info():
     """Get current webhook information for debugging"""
     try:
         from docvision.telegram_bot.services.telegram_service import get_webhook_info as get_info
+
         return get_info()
             
-    except Exception as e:
-        frappe.log_error(str(e), "Get Webhook Info Error")
+    except Exception:
+        log_exception("Get Webhook Info Error")
         return {
             "success": False,
-            "message": str(e)
+            "message": "Unable to retrieve webhook information"
         }

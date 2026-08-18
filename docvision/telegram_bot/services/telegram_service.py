@@ -4,7 +4,8 @@ Handles all communication with Telegram API
 """
 import frappe
 import requests
-from frappe import _
+
+from docvision.telegram_bot.utils.logging import log_error, log_exception
 
 
 def get_telegram_image_url(file_id):
@@ -33,9 +34,10 @@ def get_telegram_image_url(file_id):
         return image_url
         
     except requests.exceptions.Timeout:
+        log_exception("Get Telegram Image Timeout", file_id=file_id)
         return None
-    except Exception as e:
-        frappe.log_error(str(e), "Get Telegram Image Error")
+    except Exception:
+        log_exception("Get Telegram Image Error", file_id=file_id)
         return None
 
 
@@ -46,7 +48,11 @@ def send_telegram_message(chat_id, text):
         bot_token = telegram_setting.get_password("telegram_bot_token")
         
         if not bot_token:
-            frappe.log_error("Bot token not found in Telegram Setting", "Telegram Send Error")
+            log_error(
+                "Telegram Send Error",
+                "Bot token not found in Telegram Setting",
+                chat_id=chat_id,
+            )
             return
         
         bot_token = bot_token.strip()
@@ -64,21 +70,19 @@ def send_telegram_message(chat_id, text):
         )
         
         if response.status_code != 200:
-            frappe.log_error(
-                f"Failed to send message.\n"
-                f"Status: {response.status_code}\n"
-                f"URL: {url}\n"
-                f"Response: {response.text}\n"
-                f"Chat ID: {chat_id}", 
-                "Telegram Send Error"
+            log_error(
+                "Telegram Send Error",
+                "Telegram API rejected sendMessage request",
+                chat_id=chat_id,
+                http_status=response.status_code,
+                telegram_response=response.text,
             )
         
-    except Exception as e:
-        frappe.log_error(
-            f"Exception: {str(e)}\n"
-            f"Chat ID: {chat_id}\n"
-            f"Message: {text[:100] if text else 'Empty'}", 
-            "Telegram Send Error"
+    except Exception:
+        log_exception(
+            "Telegram Send Error",
+            chat_id=chat_id,
+            has_message=bool(text),
         )
 
 
@@ -117,9 +121,9 @@ def get_webhook_info():
                 "message": webhook_info.get('description', 'Failed to get webhook info')
             }
             
-    except Exception as e:
-        frappe.log_error(str(e), "Get Webhook Info Error")
+    except Exception:
+        log_exception("Get Webhook Info Error")
         return {
             "success": False,
-            "message": str(e)
+            "message": "Unable to retrieve webhook information"
         }

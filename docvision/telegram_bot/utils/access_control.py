@@ -3,7 +3,8 @@ Access control utilities
 Manages bot access for users
 """
 import frappe
-from frappe import _
+
+from docvision.telegram_bot.utils.logging import log_exception
 
 
 def check_bot_access(telegram_id, chat_id, user_name):
@@ -28,11 +29,11 @@ def check_bot_access(telegram_id, chat_id, user_name):
                     "allow_access": 0
                 }).insert(ignore_permissions=True)
                 frappe.db.commit()
-            except Exception as e:
-                frappe.log_error(str(e), "Bot Access Creation Error")
+            except Exception:
+                log_exception("Bot Access Creation Error", telegram_id=telegram_id)
         
         return False
         
-    except Exception as e:
-        frappe.log_error(str(e), "Access Check Error")
+    except Exception:
+        log_exception("Access Check Error", telegram_id=telegram_id)
         return False

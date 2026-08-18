@@ -1,6 +1,34 @@
 
 import frappe
-from frappe import _
+
+from docvision.telegram_bot.utils.logging import log_exception
+
+
+def create_address_for_party(data, party_type, party_name, address_title):
+    """Create an Address linked to the same party as the Contact."""
+    address_data = getattr(data, "address", None)
+    if not address_data:
+        return None
+
+    address = frappe.get_doc({
+        "doctype": "Address",
+        "address_title": address_title or party_name,
+        "address_type": "Office",
+        "address_line1": getattr(address_data, "address_line1", None),
+        "address_line2": getattr(address_data, "address_line2", None),
+        "city": getattr(address_data, "city", None),
+        "state": getattr(address_data, "state", None),
+        "pincode": getattr(address_data, "pincode", None),
+        "country": getattr(address_data, "country", None) or "India",
+        "is_primary_address": 1,
+        "links": [{
+            "link_doctype": party_type,
+            "link_name": party_name,
+        }],
+    })
+    address.insert(ignore_permissions=True)
+
+    return address
 
 def create_contact_with_party(data, party_type, party_name):
   
@@ -83,19 +111,6 @@ def create_contact_with_party(data, party_type, party_name):
                 'is_primary_mobile_no': 1
             })
         
-        # Add address if available
-        if hasattr(data, 'address') and data.address:
-            contact.append('address', {
-                'address_type': 'Office',
-                'address_line1': getattr(data.address, 'address_line1', None),
-                'address_line2': getattr(data.address, 'address_line2', None),
-                'city': getattr(data.address, 'city', None),
-                'state': getattr(data.address, 'state', None),
-                'pincode': getattr(data.address, 'pincode', None),
-                'country': getattr(data.address, 'country', None) or 'India',
-                'is_primary_address': 1
-            })
-        
         # Link to party
         contact.append('links', {
             'link_doctype': party_type,
@@ -103,6 +118,12 @@ def create_contact_with_party(data, party_type, party_name):
         })
         
         contact.insert(ignore_permissions=True)
+        create_address_for_party(
+            data,
+            party_type,
+            party_name,
+            getattr(data, "company_name", None) or contact.full_name,
+        )
         frappe.db.commit()
         
         return contact
@@ -177,7 +198,7 @@ def create_lead_from_data(data):
             return frappe.get_doc("Lead", result[0].name)
     
     # No existing lead - create new one
-    source_name = get_or_create_lead_source("Telegram Bot")
+    source_field, source_name = get_or_create_lead_source("Telegram Bot")
     
     lead_data = {
         "doctype": "Lead",
@@ -193,7 +214,7 @@ def create_lead_from_data(data):
     }
     
     if source_name:
-        lead_data["source"] = source_name
+        lead_data[source_field] = source_name
     
     lead = frappe.get_doc(lead_data)
     
@@ -213,20 +234,31 @@ def create_lead_from_data(data):
 
 
 def get_or_create_lead_source(source_name):
-    """Get existing Lead Source or create if doesn't exist"""
+    """Get or create the source used by the installed ERPNext version."""
     try:
-        if frappe.db.exists("Lead Source", source_name):
-            return source_name
-        
-        lead_source = frappe.get_doc({
-            "doctype": "Lead Source",
-            "source_name": source_name
-        })
-        lead_source.insert(ignore_permissions=True)
+        if frappe.get_meta("Lead").has_field("utm_source"):
+            source_doctype = "UTM Source"
+            source_field = "utm_source"
+            source_values = {
+                "doctype": source_doctype,
+                "name": source_name,
+                "slug": frappe.utils.slug(source_name),
+            }
+        else:
+            source_doctype = "Lead Source"
+            source_field = "source"
+            source_values = {
+                "doctype": source_doctype,
+                "source_name": source_name,
+            }
+
+        if not frappe.db.exists(source_doctype, source_name):
+            frappe.get_doc(source_values).insert(ignore_permissions=True)
+
         frappe.db.commit()
-        
-        return source_name
-        
-    except Exception as e:
-        frappe.log_error(str(e), "Lead Source Creation Error")
-        return None
+
+        return source_field, source_name
+
+    except Exception:
+        log_exception("Lead Source Creation Error", source_name=source_name)
+        return "utm_source", None
