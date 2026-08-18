@@ -10,6 +10,13 @@ def create_address_for_party(data, party_type, party_name, address_title):
     if not address_data:
         return None
 
+    country = getattr(address_data, "country", None) or "India"
+    state = getattr(address_data, "state", None)
+
+    ignore_validate = (
+        country.strip().casefold() == "india" and not (state or "").strip()
+    )
+
     address = frappe.get_doc({
         "doctype": "Address",
         "address_title": address_title or party_name,
@@ -17,15 +24,20 @@ def create_address_for_party(data, party_type, party_name, address_title):
         "address_line1": getattr(address_data, "address_line1", None),
         "address_line2": getattr(address_data, "address_line2", None),
         "city": getattr(address_data, "city", None),
-        "state": getattr(address_data, "state", None),
+        "state": state,
         "pincode": getattr(address_data, "pincode", None),
-        "country": getattr(address_data, "country", None) or "India",
+        "country": country,
         "is_primary_address": 1,
         "links": [{
             "link_doctype": party_type,
             "link_name": party_name,
         }],
     })
+    if ignore_validate:
+        # India Compliance requires a state for Indian addresses. Contact data
+        # extracted from a document may not contain one, but the partial address
+        # should still be stored.
+        address.flags.ignore_validate = True
     address.insert(ignore_permissions=True)
 
     return address
