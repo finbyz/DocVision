@@ -42,11 +42,16 @@ def create_address_for_party(data, party_type, party_name, address_title):
 
     return address
 
+import re
+from docvision.telegram_bot.utils.validators import clean_phone_number
+
+
 def create_contact_with_party(data, party_type, party_name):
   
     # Get primary identifiers
     primary_email = data.email_ids[0].email_id if data.email_ids and len(data.email_ids) > 0 else None
-    primary_phone = data.phone_nos[0].phone if data.phone_nos and len(data.phone_nos) > 0 else None
+    raw_phone = data.phone_nos[0].phone if data.phone_nos and len(data.phone_nos) > 0 else None
+    primary_phone = clean_phone_number(raw_phone)
     
     existing_contact = None
     
@@ -66,17 +71,17 @@ def create_contact_with_party(data, party_type, party_name):
     
     # Check by phone if email not found
     if not existing_contact and primary_phone:
-        normalized_phone = primary_phone.strip()
-        
-        result = frappe.db.sql("""
-            SELECT parent
-            FROM `tabContact Phone`
-            WHERE phone = %s
-            LIMIT 1
-        """, (normalized_phone,), as_dict=True)
-        
-        if result:
-            existing_contact = frappe.get_doc("Contact", result[0].parent)
+        last_10 = re.sub(r"\D", "", primary_phone)[-10:]
+        if last_10:
+            result = frappe.db.sql("""
+                SELECT parent
+                FROM `tabContact Phone`
+                WHERE phone LIKE %s
+                LIMIT 1
+            """, (f"%{last_10}",), as_dict=True)
+            
+            if result:
+                existing_contact = frappe.get_doc("Contact", result[0].parent)
     
     # If contact exists, just link it to the party
     if existing_contact:
@@ -115,10 +120,10 @@ def create_contact_with_party(data, party_type, party_name):
                 'is_primary': 1
             })
         
-        # Add phone
+        # Add phone(s) cleaned
         if primary_phone:
             contact.append('phone_nos', {
-                'phone': primary_phone.strip(),
+                'phone': primary_phone,
                 'is_primary_phone': 1,
                 'is_primary_mobile_no': 1
             })
@@ -177,7 +182,8 @@ def create_lead_from_data(data):
     """Create new Lead from extracted data or return existing"""
     
     primary_email = data.email_ids[0].email_id if data.email_ids and len(data.email_ids) > 0 else None
-    primary_phone = data.phone_nos[0].phone if data.phone_nos and len(data.phone_nos) > 0 else None
+    raw_phone = data.phone_nos[0].phone if data.phone_nos and len(data.phone_nos) > 0 else None
+    primary_phone = clean_phone_number(raw_phone)
     
     # Check if lead already exists by email
     if primary_email:
@@ -196,21 +202,23 @@ def create_lead_from_data(data):
     
     # Check by phone
     if primary_phone:
-        normalized_phone = primary_phone.strip()
-        
-        result = frappe.db.sql("""
-            SELECT name
-            FROM `tabLead`
-            WHERE phone = %s
-            AND status != 'Converted'
-            LIMIT 1
-        """, (normalized_phone,), as_dict=True)
-        
-        if result:
-            return frappe.get_doc("Lead", result[0].name)
+        last_10 = re.sub(r"\D", "", primary_phone)[-10:]
+        if last_10:
+            result = frappe.db.sql("""
+                SELECT name
+                FROM `tabLead`
+                WHERE phone LIKE %s
+                AND status != 'Converted'
+                LIMIT 1
+            """, (f"%{last_10}",), as_dict=True)
+            
+            if result:
+                return frappe.get_doc("Lead", result[0].name)
     
     # No existing lead - create new one
-    source_field, source_name = get_or_create_lead_source("Telegram Bot")
+    setting = frappe.get_single("Telegram Setting")
+    configured_source = setting.lead_source or "Frappe Verse 2026"
+    source_field, source_name = get_or_create_lead_source(configured_source)
     
     lead_data = {
         "doctype": "Lead",
@@ -221,8 +229,10 @@ def create_lead_from_data(data):
         "designation": getattr(data, 'designation', None),
         "company_name": getattr(data, 'company_name', None),
         "email_id": primary_email.lower().strip() if primary_email else None,
-        "phone": primary_phone.strip() if primary_phone else None,
-        "website": getattr(data, 'website', None) or getattr(data, 'company_domain', None)
+        "phone": primary_phone,
+        "mobile_no": primary_phone,
+        "website": getattr(data, 'website', None) or getattr(data, 'company_domain', None),
+        "lead_owner": "Administrator",
     }
     
     if source_name:
@@ -243,6 +253,7 @@ def create_lead_from_data(data):
     frappe.db.commit()
     
     return lead
+
 
 
 def get_or_create_lead_source(source_name):

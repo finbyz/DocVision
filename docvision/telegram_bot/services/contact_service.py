@@ -38,23 +38,28 @@ def process_contact_or_lead(data):
             }
         
         if contact_result.get('status') == 'success' and contact_result.get('contact'):
-            if contact_result.get('with_domain'):
-                # Contact exists - Return existing
-                if not contact_result.get('party_type') or not contact_result.get('party_name'):
-                    return {
-                        "success": True,
-                        "message": format_existing_contact_message(contact_result['contact'])
-                    }
-
+            # Contact found (by email, phone, or domain) — return it with linked party info
+            if not contact_result.get('party_type') or not contact_result.get('party_name'):
                 return {
                     "success": True,
-                    "message": format_existing_party_message(
-                        contact_result['party_type'],
-                        contact_result['party_name'],
-                        contact_result['party_display'],
-                        contact_result['contact']
-                    )
+                    "message": format_existing_contact_message(contact_result['contact']),
+                    "contact_name": contact_result['contact'].name,
+                    "party_type": None,
+                    "party_name": None
                 }
+
+            return {
+                "success": True,
+                "message": format_existing_party_message(
+                    contact_result['party_type'],
+                    contact_result['party_name'],
+                    contact_result['party_display'],
+                    contact_result['contact']
+                ),
+                "contact_name": contact_result['contact'].name,
+                "party_type": contact_result['party_type'],
+                "party_name": contact_result['party_name']
+            }
         
         # Step 2: Check if customer exists
         company_name = data.core_company_name or data.company_name
@@ -68,7 +73,10 @@ def process_contact_or_lead(data):
                 "success": True,
                 "message": format_contact_created_with_party_message(
                     contact, "Customer", customer['name'], customer.get('customer_name', '')
-                )
+                ),
+                "party_type": "Customer",
+                "party_name": customer['name'],
+                "contact_name": contact.name
             }
         
         # Step 3: Check if lead exists
@@ -81,7 +89,10 @@ def process_contact_or_lead(data):
                 "success": True,
                 "message": format_contact_created_with_party_message(
                     contact, "Lead", lead['name'], lead.get('lead_name', '')
-                )
+                ),
+                "party_type": "Lead",
+                "party_name": lead['name'],
+                "contact_name": contact.name
             }
         
         # Step 4: Create new Lead + Contact
@@ -92,7 +103,10 @@ def process_contact_or_lead(data):
         
         return {
             "success": True,
-            "message": format_new_lead_and_contact_message(lead, contact)
+            "message": format_new_lead_and_contact_message(lead, contact),
+            "party_type": "Lead",
+            "party_name": lead.name,
+            "contact_name": contact.name
         }
         
     except Exception:

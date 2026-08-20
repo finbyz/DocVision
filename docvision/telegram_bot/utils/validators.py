@@ -1,8 +1,27 @@
-"""
-Validators for data validation
-"""
+import re
 import frappe
 from frappe import _
+
+
+def clean_phone_number(phone):
+    """
+    Normalizes a phone number to only contain digits, spaces, and '+',
+    preventing validation errors in productivity_next or other hooks.
+    Example: '+91-9810123456' -> '+91 9810123456'
+             '(011) 2755-4433' -> '011 2755 4433'
+    """
+    if not phone:
+        return None
+    phone_str = str(phone).strip()
+    if not phone_str:
+        return None
+    # Replace common separator characters with space
+    cleaned = re.sub(r"[-./\(\)\[\],_]", " ", phone_str)
+    # Strip any characters except digits, '+', and whitespace
+    cleaned = re.sub(r"[^\d+ ]", "", cleaned)
+    # Collapse multiple spaces
+    cleaned = re.sub(r"\s+", " ", cleaned).strip()
+    return cleaned if cleaned else None
 
 
 def is_valid_extraction(data):
@@ -16,3 +35,4 @@ def is_valid_extraction(data):
                   (hasattr(data, 'phone_nos') and data.phone_nos and len(data.phone_nos) > 0)
     
     return has_name or has_company or has_contact
+

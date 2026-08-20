@@ -77,8 +77,16 @@ doctype_list_js = {
 # before_install = "docvision.install.before_install"
 # after_install = "docvision.setup.install.after_install"
 
-# Uninstallation
-# ------------
+fixtures = [
+    {
+        "dt": "AI Agent",
+        "filters": [["name", "in", ["DocVision Initial Outreach Agent"]]]
+    },
+    {
+        "dt": "Lead Source",
+        "filters": [["name", "in", ["Frappe Verse 2026"]]]
+    }
+]
 
 # before_uninstall = "docvision.uninstall.before_uninstall"
 # after_uninstall = "docvision.uninstall.after_uninstall"

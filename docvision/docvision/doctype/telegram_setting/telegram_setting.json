@@ -6,7 +6,17 @@
  "engine": "InnoDB",
  "field_order": [
   "telegram_bot_token",
-  "ai_agent"
+  "ai_agent",
+  "column_break_source",
+  "lead_source",
+  "section_outreach",
+  "enable_auto_outreach",
+  "column_break_outreach",
+  "email_account",
+  "section_agents",
+  "company_research_agent",
+  "person_research_agent",
+  "email_agent"
  ],
  "fields": [
   {
@@ -17,7 +27,65 @@
   {
    "fieldname": "ai_agent",
    "fieldtype": "Link",
-   "label": "AI Agent",
+   "label": "Card Vision AI Agent",
+   "options": "AI Agent"
+  },
+  {
+   "fieldname": "column_break_source",
+   "fieldtype": "Column Break"
+  },
+  {
+   "default": "Frappe Verse 2026",
+   "fieldname": "lead_source",
+   "fieldtype": "Link",
+   "label": "Default Lead Source",
+   "options": "Lead Source"
+  },
+  {
+   "fieldname": "section_outreach",
+   "fieldtype": "Section Break",
+   "label": "Automated Lead Outreach"
+  },
+  {
+   "default": "0",
+   "fieldname": "enable_auto_outreach",
+   "fieldtype": "Check",
+   "label": "Enable Automated Research & Email Outreach"
+  },
+  {
+   "fieldname": "column_break_outreach",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "email_account",
+   "fieldtype": "Link",
+   "label": "Sender Email Account",
+   "options": "Email Account"
+  },
+  {
+   "depends_on": "enable_auto_outreach",
+   "fieldname": "section_agents",
+   "fieldtype": "Section Break",
+   "label": "Outreach AI Agents"
+  },
+  {
+   "fieldname": "company_research_agent",
+   "fieldtype": "Link",
+   "label": "Company Research Agent",
+   "mandatory_depends_on": "enable_auto_outreach",
+   "options": "AI Agent"
+  },
+  {
+   "fieldname": "person_research_agent",
+   "fieldtype": "Link",
+   "label": "Person Research Agent",
+   "options": "AI Agent"
+  },
+  {
+   "fieldname": "email_agent",
+   "fieldtype": "Link",
+   "label": "Email Drafting Agent",
+   "mandatory_depends_on": "enable_auto_outreach",
    "options": "AI Agent"
   }
  ],
@@ -25,7 +93,7 @@
  "index_web_pages_for_search": 1,
  "issingle": 1,
  "links": [],
- "modified": "2025-11-25 18:02:29.602776",
+ "modified": "2026-08-20 10:00:00.000000",
  "modified_by": "Administrator",
  "module": "Docvision",
  "name": "Telegram Setting",

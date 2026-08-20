@@ -2,6 +2,7 @@
 Message handlers for different chat types
 Handles private and group messages
 """
+import frappe
 from docvision.telegram_bot.services.telegram_service import send_telegram_message, get_telegram_image_url
 from docvision.telegram_bot.services.ai_service import process_business_card_with_context
 from docvision.telegram_bot.services.contact_service import process_contact_or_lead
@@ -45,7 +46,20 @@ def handle_private_message(message, chat_id):
 def handle_group_message(message, chat_id):
     """Handle messages from group chats"""
     try:
-        text_message = message.get('caption') or message.get('text', '')
+        text_message = (message.get('caption') or message.get('text') or '').strip()
+        
+        # Handle /start or /help command in group
+        if text_message.startswith('/start') or text_message.startswith('/help'):
+            user_name = message.get('from', {}).get('first_name', 'there')
+            send_telegram_message(
+                chat_id,
+                f"Hello {user_name}! 👋\n\n"
+                "Send any business card photo in this group and I will automatically:\n"
+                "• Extract contact & company details\n"
+                "• Create the Lead & Contact in ERPNext\n"
+                "• Research the company and draft a personalized outreach email"
+            )
+            return {"status": "ok"}
         
         if 'photo' not in message:
             return {"status": "ok", "message": "No image in group message"}
@@ -60,6 +74,7 @@ def handle_group_message(message, chat_id):
             message_id=message.get("message_id"),
         )
         return {"status": "error", "message": "Unable to process group message"}
+
 
 
 def process_business_card_image(message, chat_id, text_context=""):
@@ -111,6 +126,23 @@ def process_business_card_image(message, chat_id, text_context=""):
         # Send final result
         if result.get('success'):
             send_telegram_message(chat_id, result['message'])
+            
+            # If a Lead was processed, trigger auto-outreach if enabled in Telegram Setting
+            party_type = result.get("party_type")
+            party_name = result.get("party_name")
+            contact_name = result.get("contact_name")
+            
+            if party_type == "Lead" and party_name:
+                setting = frappe.get_single("Telegram Setting")
+                if setting.enable_auto_outreach:
+                    frappe.enqueue(
+                        "docvision.telegram_bot.services.outreach_service.create_and_send_outreach_draft",
+                        queue="short",
+                        lead_name=party_name,
+                        contact_name=contact_name,
+                        chat_id=chat_id,
+                        enqueue_after_commit=True
+                    )
         else:
             send_telegram_message(
                 chat_id, 

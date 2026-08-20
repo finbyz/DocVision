@@ -1,9 +1,8 @@
-"""
-Search service for finding existing contacts, customers, and leads
-"""
+import re
 import frappe
 
 from docvision.telegram_bot.utils.logging import log_exception
+from docvision.telegram_bot.utils.validators import clean_phone_number
 
 
 def get_contact_with_domain_or_email(data):
@@ -11,7 +10,8 @@ def get_contact_with_domain_or_email(data):
     try:
         # Safe attribute access for Pydantic
         primary_email = data.email_ids[0].email_id if data.email_ids and len(data.email_ids) > 0 else None
-        primary_phone = data.phone_nos[0].phone if data.phone_nos and len(data.phone_nos) > 0 else None
+        raw_phone = data.phone_nos[0].phone if data.phone_nos and len(data.phone_nos) > 0 else None
+        primary_phone = clean_phone_number(raw_phone)
         company_domain = getattr(data, 'company_domain', None) or getattr(data, 'website', None)
         
         # Normalize email
@@ -74,58 +74,59 @@ def get_contact_with_domain_or_email(data):
         
         # STEP 2: Check by phone (if email not found)
         if primary_phone:
-            normalized_phone = primary_phone.strip()
-            
-            contact = frappe.db.sql("""
-                SELECT DISTINCT parent
-                FROM `tabContact Phone`
-                WHERE phone = %s
-                LIMIT 1
-            """, (normalized_phone,), as_dict=True)
-            
-            if contact:
-                contact_doc = frappe.get_doc("Contact", contact[0].parent)
+            last_10 = re.sub(r"\D", "", primary_phone)[-10:]
+            if last_10:
+                contact = frappe.db.sql("""
+                    SELECT DISTINCT parent
+                    FROM `tabContact Phone`
+                    WHERE phone LIKE %s
+                    LIMIT 1
+                """, (f"%{last_10}",), as_dict=True)
                 
-                customer_link = None
-                lead_link = None
-                
-                for link in contact_doc.links:
-                    if link.link_doctype == "Customer":
-                        customer_link = link
-                        break
-                    elif link.link_doctype == "Lead":
-                        lead_link = link
-                
-                if customer_link:
-                    customer = frappe.get_doc("Customer", customer_link.link_name)
-                    return {
-                        "status": "success",
-                        "with_domain": bool(company_domain),
-                        "contact": contact_doc,
-                        "party_type": "Customer",
-                        "party_name": customer.name,
-                        "party_display": customer.customer_name
-                    }
-                
-                if lead_link:
-                    lead = frappe.get_doc("Lead", lead_link.link_name)
-                    return {
-                        "status": "success",
-                        "with_domain": bool(company_domain),
-                        "contact": contact_doc,
-                        "party_type": "Lead",
-                        "party_name": lead.name,
-                        "party_display": lead.lead_name or lead.company_name
-                    }
+                if contact:
+                    contact_doc = frappe.get_doc("Contact", contact[0].parent)
                     
-                return {
-                    "status": "success",
-                    "with_domain": bool(company_domain),
-                    "contact": contact_doc,
-                    "party_type": None,
-                    "party_name": None,
-                    "party_display": contact_doc.first_name or contact_doc.name
-                }
+                    customer_link = None
+                    lead_link = None
+                    
+                    for link in contact_doc.links:
+                        if link.link_doctype == "Customer":
+                            customer_link = link
+                            break
+                        elif link.link_doctype == "Lead":
+                            lead_link = link
+                    
+                    if customer_link:
+                        customer = frappe.get_doc("Customer", customer_link.link_name)
+                        return {
+                            "status": "success",
+                            "with_domain": bool(company_domain),
+                            "contact": contact_doc,
+                            "party_type": "Customer",
+                            "party_name": customer.name,
+                            "party_display": customer.customer_name
+                        }
+                    
+                    if lead_link:
+                        lead = frappe.get_doc("Lead", lead_link.link_name)
+                        return {
+                            "status": "success",
+                            "with_domain": bool(company_domain),
+                            "contact": contact_doc,
+                            "party_type": "Lead",
+                            "party_name": lead.name,
+                            "party_display": lead.lead_name or lead.company_name
+                        }
+                        
+                    return {
+                        "status": "success",
+                        "with_domain": bool(company_domain),
+                        "contact": contact_doc,
+                        "party_type": None,
+                        "party_name": None,
+                        "party_display": contact_doc.first_name or contact_doc.name
+                    }
+
         
         # STEP 3: Check by company domain (only if email AND phone not found)
         if company_domain and not primary_email:
