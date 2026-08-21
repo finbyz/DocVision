@@ -194,22 +194,17 @@ def create_lead_from_data(data):
         if result:
             return frappe.get_doc("Lead", result[0].name)
     
-    # Check by phone / whatsapp number
+    # Check by phone
     if primary_phone:
         normalized_phone = primary_phone.strip()
-        lead_meta = frappe.get_meta("Lead")
-        phone_fields = [f for f in ["whatsapp_number", "whatsapp_no", "phone", "mobile_no"] if lead_meta.has_field(f)]
-        if not phone_fields:
-            phone_fields = ["phone"]
         
-        conditions = " OR ".join([f"`{f}` = %s" for f in phone_fields])
-        result = frappe.db.sql(f"""
+        result = frappe.db.sql("""
             SELECT name
             FROM `tabLead`
-            WHERE ({conditions})
+            WHERE whatsapp_number = %s
             AND status != 'Converted'
             LIMIT 1
-        """, tuple(normalized_phone for _ in phone_fields), as_dict=True)
+        """, (normalized_phone,), as_dict=True)
         
         if result:
             return frappe.get_doc("Lead", result[0].name)
@@ -226,23 +221,9 @@ def create_lead_from_data(data):
         "designation": getattr(data, 'designation', None),
         "company_name": getattr(data, 'company_name', None),
         "email_id": primary_email.lower().strip() if primary_email else None,
+        "whatsapp_number": primary_phone.strip() if primary_phone else None,
         "website": getattr(data, 'website', None) or getattr(data, 'company_domain', None)
     }
-
-    if primary_phone:
-        phone_val = primary_phone.strip()
-        lead_meta = frappe.get_meta("Lead")
-        if lead_meta.has_field("whatsapp_number"):
-            lead_data["whatsapp_number"] = phone_val
-        if lead_meta.has_field("whatsapp_no"):
-            lead_data["whatsapp_no"] = phone_val
-        if lead_meta.has_field("phone"):
-            lead_data["phone"] = phone_val
-        if lead_meta.has_field("mobile_no"):
-            lead_data["mobile_no"] = phone_val
-        # Default fallback to whatsapp_number
-        if "whatsapp_number" not in lead_data and "whatsapp_no" not in lead_data and "phone" not in lead_data:
-            lead_data["whatsapp_number"] = phone_val
     
     if source_name:
         lead_data[source_field] = source_name

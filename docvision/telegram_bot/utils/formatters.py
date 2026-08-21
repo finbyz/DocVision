@@ -1,3 +1,4 @@
+
 """
 Message formatters
 Formats Telegram messages for different scenarios
@@ -86,10 +87,9 @@ def format_new_lead_and_contact_message(lead, contact):
     if lead.email_id:
         msg += f"📧 Email: {lead.email_id}\n"
     
-    if getattr(lead, "whatsapp_number", None):
-        msg += f"📞 WhatsApp: {lead.whatsapp_number}\n"
-    elif getattr(lead, "phone", None):
-        msg += f"📞 Phone: {lead.phone}\n"
+    phone = getattr(lead, "whatsapp_number", None) or getattr(lead, "phone", None)
+    if phone:
+        msg += f"📞 Phone: {phone}\n"
     
     if lead.company_name:
         msg += f"🏢 Company: {lead.company_name}\n"
