@@ -125,3 +125,23 @@ class TestFormatters(TestCase):
         self.assertIn("Contact also created and linked", message)
         self.assertIn("/app/lead/LEAD-0001", message)
         self.assertIn("/app/contact/CONTACT-0001", message)
+
+    @patch(
+        "docvision.telegram_bot.utils.formatters.frappe.utils.get_url",
+        return_value="https://erp.example.com",
+    )
+    def test_new_lead_with_whatsapp_number_message(self, _get_url):
+        lead = SimpleNamespace(
+            name="LEAD-0002",
+            lead_name="John Doe",
+            email_id="john@example.com",
+            whatsapp_number="+1 555 0200",
+            phone=None,
+            company_name="Alcop Inc",
+        )
+
+        message = format_new_lead_and_contact_message(lead, self.contact)
+
+        self.assertIn("New Lead Created", message)
+        self.assertIn("WhatsApp: +1 555 0200", message)
+        self.assertIn("/app/lead/LEAD-0002", message)

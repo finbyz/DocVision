@@ -86,7 +86,9 @@ def format_new_lead_and_contact_message(lead, contact):
     if lead.email_id:
         msg += f"📧 Email: {lead.email_id}\n"
     
-    if lead.phone:
+    if getattr(lead, "whatsapp_number", None):
+        msg += f"📞 WhatsApp: {lead.whatsapp_number}\n"
+    elif getattr(lead, "phone", None):
         msg += f"📞 Phone: {lead.phone}\n"
     
     if lead.company_name:
