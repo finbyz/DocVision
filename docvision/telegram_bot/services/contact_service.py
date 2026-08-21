@@ -2,6 +2,8 @@
 Contact and Lead service
 Handles all contact/lead creation and management logic
 """
+import frappe
+
 from docvision.telegram_bot.utils.formatters import (
     format_existing_party_message,
     format_existing_contact_message,
@@ -26,6 +28,7 @@ def process_contact_or_lead(data):
     Follows the exact n8n logic
     """
     stage = "contact_lookup"
+    frappe.db.savepoint("docvision_contact_flow")
 
     try:
         # Step 1: Check if contact exists with domain/email
@@ -110,6 +113,7 @@ def process_contact_or_lead(data):
         }
         
     except Exception:
+        frappe.db.rollback(save_point="docvision_contact_flow")
         if stage not in {"customer_lookup", "lead_lookup"}:
             log_exception("Contact/Lead Flow Error", stage=stage)
         return {

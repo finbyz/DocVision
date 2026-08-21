@@ -6,6 +6,7 @@ import json
 import frappe
 import requests
 
+from docvision.telegram_bot.utils.images import image_bytes_to_data_url, validate_image_size
 from docvision.telegram_bot.utils.logging import log_error, log_exception
 
 
@@ -17,27 +18,35 @@ def _get_bot_token():
     return None
 
 
-def get_telegram_image_url(file_id):
-    """Get direct URL for a Telegram image file"""
+def get_telegram_image_data_url(file_id: str) -> str | None:
+    """Download a Telegram image and return a credential-free data URL."""
     try:
         bot_token = _get_bot_token()
         if not bot_token:
             return None
-        
+
         file_info_response = requests.get(
             f"https://api.telegram.org/bot{bot_token}/getFile",
             params={"file_id": file_id},
             timeout=15
         )
-        
+        file_info_response.raise_for_status()
         file_info = file_info_response.json()
         if not file_info.get('ok'):
             return None
-        
+
         file_path = file_info['result']['file_path']
-        image_url = f"https://api.telegram.org/file/bot{bot_token}/{file_path}"
-        return image_url
-        
+        image_response = requests.get(
+            f"https://api.telegram.org/file/bot{bot_token}/{file_path}",
+            timeout=20,
+        )
+        image_response.raise_for_status()
+        validate_image_size(image_response.headers.get("Content-Length"))
+        return image_bytes_to_data_url(
+            image_response.content,
+            image_response.headers.get("Content-Type"),
+        )
+
     except requests.exceptions.Timeout:
         log_exception("Get Telegram Image Timeout", file_id=file_id)
         return None

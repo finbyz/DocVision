@@ -5,7 +5,7 @@ Handles AI Agent integration
 import frappe
 
 
-def process_business_card_with_context(image_url, text_context=""):
+def process_business_card_with_context(image_data_url: str, text_context: str = ""):
     """Extract data from business card image using AI Agent"""
     telegram_setting = frappe.get_single("Telegram Setting")
     ai_agent_name = telegram_setting.ai_agent
@@ -16,7 +16,7 @@ def process_business_card_with_context(image_url, text_context=""):
     agent = frappe.get_doc("AI Agent", ai_agent_name)
 
     ai_input_data = {
-        "image_url": image_url,
+        "image_url": image_data_url,
         "context": text_context or "No additional context provided"
     }
 

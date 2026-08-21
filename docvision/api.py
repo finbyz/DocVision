@@ -4,7 +4,7 @@ from frappe import _
 
 
 def get_customer_or_lead_by_email(email):
-    contact = frappe.get_all(
+    contact = frappe.get_list(
         "Contact Email",
         filters={"email_id": email},
         fields=["parent"],
@@ -41,21 +41,25 @@ def get_customer_or_lead_by_email(email):
     return None
 
 
-@frappe.whitelist()
+@frappe.whitelist(methods=["POST"])
 def get_contact(contact_data):
+    frappe.has_permission("Contact", "read", throw=True)
+
     if isinstance(contact_data, str):
         data = json.loads(contact_data)
     else:
-        data = contact_data
+        data = contact_data if isinstance(contact_data, dict) else None
+    if not data:
+        frappe.throw(_("Valid contact data is required"))
     primary_email = None
     for email in data.get("email_ids", []):
         if email.get("is_primary") == 1 and email.get("email_id"):
             primary_email = email["email_id"]
             break
 
-    if not primary_email:
-        primary_email = data["email_ids"][0]["email_id"]
-    
+    if not primary_email and data.get("email_ids"):
+        primary_email = data["email_ids"][0].get("email_id")
+
     existing_contact = frappe.db.get_value(
         "Contact", 
         {"email_id": primary_email}, 
@@ -64,6 +68,7 @@ def get_contact(contact_data):
     contact = None
     if existing_contact:
         contact = frappe.get_doc("Contact", existing_contact)
+        contact.check_permission("read")
         links = contact.links[0].as_dict() if contact.links else {}
         customer_link = next((l for l in contact.links if l.link_doctype == "Customer"), None)
         lead_link = next((l for l in contact.links if l.link_doctype == "Lead"), None)
@@ -91,7 +96,7 @@ def get_contact(contact_data):
     company_domain = data.get("company_domain")
     
     if company_domain:
-        domain_contacts = frappe.get_all(
+        domain_contacts = frappe.get_list(
             "Contact", 
             filters=[
                 ["Contact", "email_id", "like", f"%{company_domain}"],
@@ -144,13 +149,23 @@ def get_contact(contact_data):
     }
 
 
-@frappe.whitelist()
-def create_contact(contact_data,party_type,party):
+@frappe.whitelist(methods=["POST"])
+def create_contact(contact_data, party_type: str, party: str):
+    if not isinstance(party_type, str) or party_type not in {"Customer", "Lead"}:
+        frappe.throw(_("Party Type must be Customer or Lead"))
+    if not isinstance(party, str) or not party:
+        frappe.throw(_("Party is required"))
+
+    frappe.has_permission("Contact", "create", throw=True)
+    frappe.has_permission(party_type, "read", doc=party, throw=True)
+    frappe.db.savepoint("docvision_create_contact")
     try:
         if isinstance(contact_data, str):
             data = json.loads(contact_data)
         else:
-            data = contact_data
+            data = contact_data if isinstance(contact_data, dict) else None
+        if not data:
+            frappe.throw(_("Valid contact data is required"))
             
         if not data.get("email_ids") or not data["email_ids"][0].get("email_id"):
             frappe.throw(_("Email address is required"))
@@ -210,13 +225,13 @@ def create_contact(contact_data,party_type,party):
             "link_name": party
         })
         
-        contact.insert(ignore_permissions=True)
-        frappe.db.commit()
+        contact.insert()
         
         address_data = data.get("address")
         address_name = None
         
         if address_data and address_data.get('state') and address_data.get("country") and address_data.get("address_line1"):
+            frappe.has_permission("Address", "create", throw=True)
             address = frappe.new_doc("Address")
             address.address_title = f"{data.get('first_name') or ''} {data.get('last_name') or '' }".strip() or data.get('company_name', 'Address')
             address.address_type = address_data.get("address_type", "Billing")
@@ -235,9 +250,8 @@ def create_contact(contact_data,party_type,party):
                 "link_name": party
             })
             
-            address.insert(ignore_permissions=True)
+            address.insert()
             address_name = address.name
-            frappe.db.commit()
             
         return {
             "status": "success",
@@ -246,13 +260,10 @@ def create_contact(contact_data,party_type,party):
             "address_name": address_name
         }
         
-    except Exception as e:
-        frappe.db.rollback()
-        frappe.log_error(title="Error creating contact", message=str(e))
-        return {
-            "status": "error",
-            "message": f"Failed to create contact: {str(e)}"
-        }
+    except Exception:
+        frappe.db.rollback(save_point="docvision_create_contact")
+        frappe.log_error(title="Error creating contact", message=frappe.get_traceback())
+        raise
 
 def create_address(address_data, contact_name):
     
@@ -270,5 +281,6 @@ def create_address(address_data, contact_name):
         }]
     })
     
-    address_doc.insert(ignore_permissions=True)
+    frappe.has_permission("Address", "create", throw=True)
+    address_doc.insert()
     return address_doc

@@ -2,6 +2,8 @@
 Main webhook handler for Telegram bot
 Entry point for all incoming Telegram messages, callback queries, and revision replies
 """
+import hmac
+
 import frappe
 from docvision.telegram_bot.handlers.message_handler import handle_private_message, handle_group_message
 from docvision.telegram_bot.services.telegram_service import send_telegram_message, answer_callback_query
@@ -11,14 +13,19 @@ from docvision.telegram_bot.services.outreach_service import (
     process_revision_reply,
     extract_outreach_name_from_reply,
 )
+from docvision.telegram_bot.utils.access_control import check_bot_access
 from docvision.telegram_bot.utils.logging import log_exception
 
+SECRET_HEADER = "X-Telegram-Bot-Api-Secret-Token"
 
-@frappe.whitelist(allow_guest=True)
+
+@frappe.whitelist(allow_guest=True, methods=["POST"])
 def telegram_webhook():
     """Main webhook endpoint for Telegram"""
     chat_id = None
     update_id = None
+
+    _validate_webhook_secret()
 
     try:
         data = frappe.request.get_json()
@@ -40,6 +47,14 @@ def telegram_webhook():
         if not chat_id:
             return {"status": "error", "message": "No chat_id"}
 
+        from_user = message.get("from") or {}
+        if not _is_authorized(from_user):
+            send_telegram_message(
+                chat_id,
+                "⛔ Access is not enabled for your Telegram account. Contact an administrator.",
+            )
+            return {"status": "ok"}
+
         # Check if this is a reply to a revision prompt
         if message.get("reply_to_message"):
             replied_text = message.get("reply_to_message", {}).get("text", "")
@@ -51,7 +66,7 @@ def telegram_webhook():
                         outreach_name=outreach_name,
                         chat_id=chat_id,
                         revision_text=revision_text,
-                        from_user=message.get("from", {})
+                        from_user=from_user,
                     )
                     return {"status": "ok"}
 
@@ -87,6 +102,10 @@ def _handle_callback_query(callback_query: dict):
     from_user = callback_query.get("from", {})
 
     try:
+        if not _is_authorized(from_user):
+            answer_callback_query(callback_id, text="Access denied.", show_alert=True)
+            return {"status": "ok"}
+
         # Action 1: Approve & Send
         if callback_data.startswith("dov:app:"):
             outreach_name = callback_data.replace("dov:app:", "")
@@ -111,10 +130,11 @@ def _handle_callback_query(callback_query: dict):
         return {"status": "error"}
 
 
-@frappe.whitelist()
+@frappe.whitelist(methods=["POST"])
 def setup_webhook_manual():
     """Manual webhook setup via button click"""
     try:
+        frappe.has_permission("Telegram Setting", "write", throw=True)
         telegram_setting = frappe.get_single("Telegram Setting")
         telegram_setting.setup_telegram_webhook()
         
@@ -123,6 +143,8 @@ def setup_webhook_manual():
             "message": "Webhook setup triggered successfully"
         }
         
+    except frappe.PermissionError:
+        raise
     except Exception:
         log_exception("Manual Webhook Setup Error")
         return {
@@ -131,17 +153,42 @@ def setup_webhook_manual():
         }
 
 
-@frappe.whitelist()
+@frappe.whitelist(methods=["GET"])
 def get_webhook_info():
     """Get current webhook information for debugging"""
     try:
+        frappe.has_permission("Telegram Setting", "read", throw=True)
         from docvision.telegram_bot.services.telegram_service import get_webhook_info as get_info
 
         return get_info()
             
+    except frappe.PermissionError:
+        raise
     except Exception:
         log_exception("Get Webhook Info Error")
         return {
             "success": False,
             "message": "Unable to retrieve webhook information"
         }
+
+
+def _validate_webhook_secret() -> None:
+    setting = frappe.get_single("Telegram Setting")
+    expected = setting.get_password("telegram_webhook_secret", raise_exception=False) or ""
+    provided = frappe.get_request_header(SECRET_HEADER) or ""
+    if not expected or not hmac.compare_digest(expected, provided):
+        raise frappe.PermissionError("Invalid Telegram webhook token")
+
+
+def _is_authorized(from_user: dict) -> bool:
+    telegram_id = from_user.get("id")
+    return check_bot_access(telegram_id, _get_user_display_name(from_user))
+
+
+def _get_user_display_name(from_user: dict) -> str:
+    first_name = from_user.get("first_name") or ""
+    last_name = from_user.get("last_name") or ""
+    full_name = f"{first_name} {last_name}".strip()
+    if full_name:
+        return full_name
+    return from_user.get("username") or str(from_user.get("id") or "")

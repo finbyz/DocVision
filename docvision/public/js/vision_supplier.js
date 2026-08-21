@@ -1,48 +1,34 @@
-frappe.listview_settings['Supplier'] = {
-    onload: function(listview) {
-        listview.page.add_menu_item(__('Scan Card'), function() {
-            uploadImage(listview);
+frappe.listview_settings["Supplier"] = {
+    onload(listview) {
+        listview.page.add_menu_item(__("Scan Card"), () => {
+            frappe.prompt(
+                {
+                    fieldname: "image",
+                    fieldtype: "Attach Image",
+                    label: __("Upload Image"),
+                    reqd: 1,
+                    options: "Image",
+                },
+                (values) => extractBusinessCard(values.image),
+                __("Upload Image"),
+            );
         });
-    }
+    },
 };
 
-
-
-function uploadImage(frm) {
-    frappe.prompt({
-        fieldname: 'image',
-        fieldtype: 'Attach Image',
-        label: 'Upload Image',
-        reqd: 1,
-        options: 'Image'
-    }, function(data) {
-        const imgData = data.image;
-        callExtractTextApi(imgData);
-    }, 'Upload Image');
-}
-
-function callExtractTextApi(image_url) {
+function extractBusinessCard(fileId) {
     frappe.call({
-        method: "docvision.docvision.api.extract_supplier_from_image",
-        args: {
-            "file_id": image_url
-        },
-        callback: function(response) {
-            if (response.message) {
-                let data = response.message;
-
-                if (typeof data === 'string') {
-                    data = JSON.parse(data);
-                }
-                console.log(data)
-                frappe.new_doc('Supplier');
-                setTimeout(() => {
-                    window.cur_dialog.set_values(data);
-                    console.log('data', data);
-                }, 500);
-            } else {
-                frappe.msgprint(__('No data returned from API.'));
-            }
+        method: "docvision.scan_api.extract_supplier_from_image",
+        args: { file_id: fileId },
+    }).then((response) => {
+        if (!response.message) {
+            frappe.msgprint(__("No data returned from the card extraction agent."));
+            return;
         }
+
+        const values = typeof response.message === "string"
+            ? JSON.parse(response.message)
+            : response.message;
+        frappe.new_doc("Supplier", values);
     });
 }

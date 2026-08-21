@@ -6,11 +6,13 @@
  "engine": "InnoDB",
  "field_order": [
   "telegram_bot_token",
+  "telegram_webhook_secret",
   "ai_agent",
   "column_break_source",
   "lead_source",
   "section_outreach",
   "enable_auto_outreach",
+  "outreach_draft_condition",
   "column_break_outreach",
   "email_account",
   "section_agents",
@@ -23,6 +25,13 @@
    "fieldname": "telegram_bot_token",
    "fieldtype": "Password",
    "label": "Telegram Bot Token"
+  },
+  {
+   "description": "Generated automatically and used to authenticate Telegram webhook requests.",
+   "fieldname": "telegram_webhook_secret",
+   "fieldtype": "Password",
+   "label": "Telegram Webhook Secret",
+   "read_only": 1
   },
   {
    "fieldname": "ai_agent",
@@ -51,6 +60,15 @@
    "fieldname": "enable_auto_outreach",
    "fieldtype": "Check",
    "label": "Enable Automated Research & Email Outreach"
+  },
+  {
+   "depends_on": "enable_auto_outreach",
+   "description": "Optional safe expression. The Lead is available as doc and the Contact as contact. The email is drafted only when the expression is true. Example: doc.country == \"India\" and doc.industry == \"Technology\"",
+   "fieldname": "outreach_draft_condition",
+   "fieldtype": "Code",
+   "ignore_xss_filter": 1,
+   "label": "Outreach Draft Condition",
+   "options": "Python"
   },
   {
    "fieldname": "column_break_outreach",

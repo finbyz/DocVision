@@ -37,7 +37,13 @@ class TestContactService(TestCase):
                 result = process_contact_or_lead(data)
 
                 self.assertEqual(
-                    result, {"success": True, "message": "existing contact"}
+                    result, {
+                        "success": True,
+                        "message": "existing contact",
+                        "contact_name": "CONTACT-0001",
+                        "party_type": None,
+                        "party_name": None,
+                    }
                 )
                 format_contact_message.assert_called_once_with(contact)
                 format_party_message.assert_not_called()
@@ -69,12 +75,19 @@ class TestContactService(TestCase):
                 result = process_contact_or_lead(data)
 
                 self.assertEqual(
-                    result, {"success": True, "message": expected_message}
+                    result, {
+                        "success": True,
+                        "message": expected_message,
+                        "contact_name": "CONTACT-0001",
+                        "party_type": party_type,
+                        "party_name": party_name,
+                    }
                 )
                 format_message.assert_called_once_with(
                     party_type, party_name, party_display, contact
                 )
                 format_message.reset_mock()
+
 
     @patch("docvision.telegram_bot.services.contact_service.find_customer_by_company_name")
     @patch("docvision.telegram_bot.services.contact_service.get_contact_with_domain_or_email")

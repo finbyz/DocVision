@@ -3,7 +3,10 @@ Message handlers for different chat types
 Handles private and group messages
 """
 import frappe
-from docvision.telegram_bot.services.telegram_service import send_telegram_message, get_telegram_image_url
+from docvision.telegram_bot.services.telegram_service import (
+    get_telegram_image_data_url,
+    send_telegram_message,
+)
 from docvision.telegram_bot.services.ai_service import process_business_card_with_context
 from docvision.telegram_bot.services.contact_service import process_contact_or_lead
 from docvision.telegram_bot.utils.logging import log_exception
@@ -91,9 +94,9 @@ def process_business_card_image(message, chat_id, text_context=""):
         
         # Get direct image URL from Telegram
         stage = "image_download"
-        image_url = get_telegram_image_url(file_id)
+        image_data_url = get_telegram_image_data_url(file_id)
         
-        if not image_url:
+        if not image_data_url:
             send_telegram_message(
                 chat_id, 
                 "❌ Failed to access image.\n\nPlease try again."
@@ -103,7 +106,7 @@ def process_business_card_image(message, chat_id, text_context=""):
         # Extract data from image
         send_telegram_message(chat_id, "🔍 Analyzing business card...")
         stage = "ai_extraction"
-        structured_data = process_business_card_with_context(image_url, text_context)
+        structured_data = process_business_card_with_context(image_data_url, text_context)
         
         # Validate extraction
         if not structured_data or not is_valid_extraction(structured_data):

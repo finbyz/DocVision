@@ -28,9 +28,6 @@ required_apps = ["finbyz/finbyzai"]
 # page_js = {"page" : "public/js/file.js"}
 
 # include js in doctype views
-doctype_js = {
-    "Contact" : "public/js/vision_contact.js",
-}
 doctype_list_js = {
     "Contact" : "public/js/vision_contact.js",
     "Customer" : "public/js/vision_customer.js",

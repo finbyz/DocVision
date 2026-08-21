@@ -78,6 +78,7 @@ def research_lead(lead_name: str, contact_name: str = None) -> dict:
         # 1. Run Company Research if agent is configured
         if setting.company_research_agent:
             try:
+                frappe.db.savepoint("docvision_company_research")
                 comp_agent = frappe.get_doc("AI Agent", setting.company_research_agent)
                 comp_result = comp_agent.agent_service.invoke(**common_info)
                 
@@ -107,7 +108,7 @@ def research_lead(lead_name: str, contact_name: str = None) -> dict:
 
                 # Save safe fields first (customer_details, website)
                 lead.save(ignore_permissions=True)
-                frappe.db.commit()
+                frappe.db.savepoint("docvision_lead_classification")
 
                 # Validate and safely set industry (Link to Industry Type)
                 if raw_industry:
@@ -127,18 +128,19 @@ def research_lead(lead_name: str, contact_name: str = None) -> dict:
 
                 try:
                     lead.save(ignore_permissions=True)
-                    frappe.db.commit()
                 except Exception:
                     log_exception("DocVision Lead Type/Industry Save Error", lead_name=lead_name)
-                    frappe.db.rollback()
+                    frappe.db.rollback(save_point="docvision_lead_classification")
 
             except Exception:
+                frappe.db.rollback(save_point="docvision_company_research")
                 log_exception("DocVision Company Research Error", lead_name=lead_name)
 
         # 2. Run Person Research if agent is configured
         person_overview = (getattr(contact, "person_details", "") or getattr(contact, "person_research", "")) if contact else ""
         if setting.person_research_agent:
             try:
+                frappe.db.savepoint("docvision_person_research")
                 person_agent = frappe.get_doc("AI Agent", setting.person_research_agent)
                 person_result = person_agent.agent_service.invoke(**common_info)
                 
@@ -161,9 +163,9 @@ def research_lead(lead_name: str, contact_name: str = None) -> dict:
                     if linkedin and hasattr(contact, "linkedin_profile"):
                         contact.linkedin_profile = linkedin
                     contact.save(ignore_permissions=True)
-                    frappe.db.commit()
 
             except Exception:
+                frappe.db.rollback(save_point="docvision_person_research")
                 log_exception("DocVision Person Research Error", lead_name=lead_name, contact_name=contact_name)
 
         has_company_research = bool(company_overview and company_overview.strip())

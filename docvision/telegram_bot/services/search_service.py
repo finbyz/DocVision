@@ -236,16 +236,8 @@ def find_customer_by_company_name(company_name):
         
         if customer:
             return customer
-        
-        # Fall back to partial match
-        customer = frappe.db.get_value(
-            "Customer",
-            {"customer_name": ["like", f"%{company_name}%"]},
-            ["name", "customer_name"],
-            as_dict=True,
-            order_by="modified desc"
-        )
-        return customer
+
+        return None
     except Exception:
         log_exception("Find Customer Error", lookup_type="company_name")
         raise
@@ -268,18 +260,8 @@ def find_lead_by_company_name(company_name):
         
         if leads:
             return leads[0]
-        
-        # Fall back to partial match
-        leads = frappe.db.sql("""
-            SELECT name, company_name, lead_name
-            FROM `tabLead`
-            WHERE company_name LIKE %s
-            AND status != 'Converted'
-            ORDER BY modified DESC
-            LIMIT 1
-        """, (f"%{company_name}%",), as_dict=True)
-        
-        return leads[0] if leads else None
+
+        return None
     except Exception:
         log_exception("Find Lead Error", lookup_type="company_name")
         raise

@@ -96,7 +96,6 @@ def create_contact_with_party(data, party_type, party_name):
                 'link_name': party_name
             })
             existing_contact.save(ignore_permissions=True)
-            frappe.db.commit()
         
         return existing_contact
     
@@ -141,7 +140,6 @@ def create_contact_with_party(data, party_type, party_name):
             party_name,
             getattr(data, "company_name", None) or contact.full_name,
         )
-        frappe.db.commit()
         
         return contact
         
@@ -170,7 +168,6 @@ def create_contact_with_party(data, party_type, party_name):
                         'link_name': party_name
                     })
                     contact.save(ignore_permissions=True)
-                    frappe.db.commit()
                 
                 return contact
         
@@ -250,7 +247,6 @@ def create_lead_from_data(data):
         lead.country = getattr(data.address, 'country', None) or 'India'
     
     lead.insert(ignore_permissions=True)
-    frappe.db.commit()
     
     return lead
 
@@ -259,6 +255,7 @@ def create_lead_from_data(data):
 def get_or_create_lead_source(source_name):
     """Get or create the source used by the installed ERPNext version."""
     try:
+        frappe.db.savepoint("docvision_lead_source")
         if frappe.get_meta("Lead").has_field("utm_source"):
             source_doctype = "UTM Source"
             source_field = "utm_source"
@@ -278,10 +275,9 @@ def get_or_create_lead_source(source_name):
         if not frappe.db.exists(source_doctype, source_name):
             frappe.get_doc(source_values).insert(ignore_permissions=True)
 
-        frappe.db.commit()
-
         return source_field, source_name
 
     except Exception:
+        frappe.db.rollback(save_point="docvision_lead_source")
         log_exception("Lead Source Creation Error", source_name=source_name)
         return "utm_source", None
