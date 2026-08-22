@@ -198,7 +198,7 @@ def create_lead_from_data(data):
     if primary_phone:
         normalized_phone = primary_phone.strip()
         lead_meta = frappe.get_meta("Lead")
-        phone_fields = [f for f in ["whatsapp_number", "phone", "mobile_no"] if lead_meta.has_field(f)]
+        phone_fields = [f for f in ["whatsapp_no", "whatsapp_number", "phone", "mobile_no"] if lead_meta.has_field(f)]
         if not phone_fields:
             phone_fields = ["phone"]
 
@@ -226,10 +226,18 @@ def create_lead_from_data(data):
         "designation": getattr(data, 'designation', None),
         "company_name": getattr(data, 'company_name', None),
         "email_id": primary_email.lower().strip() if primary_email else None,
-        "whatsapp_number": primary_phone.strip() if primary_phone else None,
         "website": getattr(data, 'website', None) or getattr(data, 'company_domain', None)
     }
-    
+
+    # Set phone in the best available field: whatsapp_no > whatsapp_number > phone > mobile_no
+    if primary_phone:
+        phone_val = primary_phone.strip()
+        lead_meta = frappe.get_meta("Lead")
+        for field in ("whatsapp_no", "whatsapp_number", "phone", "mobile_no"):
+            if lead_meta.has_field(field):
+                lead_data[field] = phone_val
+                break
+
     if source_name:
         lead_data[source_field] = source_name
     
