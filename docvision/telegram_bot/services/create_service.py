@@ -197,14 +197,19 @@ def create_lead_from_data(data):
     # Check by phone
     if primary_phone:
         normalized_phone = primary_phone.strip()
-        
-        result = frappe.db.sql("""
+        lead_meta = frappe.get_meta("Lead")
+        phone_fields = [f for f in ["whatsapp_number", "phone", "mobile_no"] if lead_meta.has_field(f)]
+        if not phone_fields:
+            phone_fields = ["phone"]
+
+        conditions = " OR ".join([f"`{f}` = %s" for f in phone_fields])
+        result = frappe.db.sql(f"""
             SELECT name
             FROM `tabLead`
-            WHERE whatsapp_number = %s
+            WHERE ({conditions})
             AND status != 'Converted'
             LIMIT 1
-        """, (normalized_phone,), as_dict=True)
+        """, tuple(normalized_phone for _ in phone_fields), as_dict=True)
         
         if result:
             return frappe.get_doc("Lead", result[0].name)

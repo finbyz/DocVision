@@ -143,5 +143,5 @@ class TestFormatters(TestCase):
         message = format_new_lead_and_contact_message(lead, self.contact)
 
         self.assertIn("New Lead Created", message)
-        self.assertIn("WhatsApp: +1 555 0200", message)
+        self.assertIn("📞 Phone: +1 555 0200", message)
         self.assertIn("/app/lead/LEAD-0002", message)
