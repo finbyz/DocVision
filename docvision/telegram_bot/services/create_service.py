@@ -91,8 +91,7 @@ def create_contact_with_party(data, party_type, party_name):
                 'link_name': party_name
             })
             existing_contact.save(ignore_permissions=True)
-            frappe.db.commit()
-        
+
         return existing_contact
     
     # No existing contact - create new one
@@ -136,8 +135,7 @@ def create_contact_with_party(data, party_type, party_name):
             party_name,
             getattr(data, "company_name", None) or contact.full_name,
         )
-        frappe.db.commit()
-        
+
         return contact
         
     except frappe.exceptions.DuplicateEntryError:
@@ -165,8 +163,7 @@ def create_contact_with_party(data, party_type, party_name):
                         'link_name': party_name
                     })
                     contact.save(ignore_permissions=True)
-                    frappe.db.commit()
-                
+
                 return contact
         
         # Re-raise if we couldn't recover
@@ -253,8 +250,7 @@ def create_lead_from_data(data):
         lead.country = getattr(data.address, 'country', None) or 'India'
     
     lead.insert(ignore_permissions=True)
-    frappe.db.commit()
-    
+
     return lead
 
 
@@ -279,8 +275,6 @@ def get_or_create_lead_source(source_name):
 
         if not frappe.db.exists(source_doctype, source_name):
             frappe.get_doc(source_values).insert(ignore_permissions=True)
-
-        frappe.db.commit()
 
         return source_field, source_name
 
