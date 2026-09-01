@@ -6,7 +6,8 @@ import frappe
 
 
 def sync_agent():
-    frappe.only_for("System Manager")
+    if getattr(frappe, "session", None) and getattr(frappe.session, "user", None) and frappe.session.user != "Administrator":
+        frappe.only_for("System Manager")
     fixture_path = frappe.get_app_path("docvision", "fixtures", "ai_agent.json")
     with open(fixture_path, encoding="utf-8") as fixture_file:
         agents = json.load(fixture_file)

@@ -1,6 +1,7 @@
 
 import frappe
 
+from docvision.telegram_bot.utils.country import resolve_country
 from docvision.telegram_bot.utils.logging import log_exception
 
 
@@ -10,11 +11,12 @@ def create_address_for_party(data, party_type, party_name, address_title):
     if not address_data:
         return None
 
-    country = getattr(address_data, "country", None) or "India"
+    raw_country = getattr(address_data, "country", None)
+    country = resolve_country(raw_country, default="India")
     state = getattr(address_data, "state", None)
 
     ignore_validate = (
-        country.strip().casefold() == "india" and not (state or "").strip()
+        bool(country and country.strip().casefold() == "india" and not (state or "").strip())
     )
 
     address = frappe.get_doc({
@@ -244,7 +246,8 @@ def create_lead_from_data(data):
         lead.city = getattr(data.address, 'city', None)
         lead.state = getattr(data.address, 'state', None)
         lead.pincode = getattr(data.address, 'pincode', None)
-        lead.country = getattr(data.address, 'country', None) or 'India'
+        raw_country = getattr(data.address, 'country', None)
+        lead.country = resolve_country(raw_country, default="India")
     
     lead.insert(ignore_permissions=True)
     

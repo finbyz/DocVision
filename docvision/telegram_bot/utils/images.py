@@ -6,6 +6,11 @@ import frappe
 
 MAX_IMAGE_BYTES = 10 * 1024 * 1024
 ALLOWED_IMAGE_TYPES = {"image/jpeg", "image/png", "image/webp"}
+GENERIC_BINARY_TYPES = {
+    "application/octet-stream",
+    "binary/octet-stream",
+    "application/x-download",
+}
 
 
 def image_bytes_to_data_url(content: bytes, content_type: str | None) -> str:
@@ -17,12 +22,17 @@ def image_bytes_to_data_url(content: bytes, content_type: str | None) -> str:
 
     detected_type = _detect_image_type(content)
     declared_type = (content_type or "").split(";", 1)[0].strip().lower()
+    if declared_type == "image/jpg":
+        declared_type = "image/jpeg"
+
     if detected_type not in ALLOWED_IMAGE_TYPES:
         frappe.throw("Only JPEG, PNG, and WebP images are supported.")
-    if declared_type and declared_type not in ALLOWED_IMAGE_TYPES:
-        frappe.throw("Only JPEG, PNG, and WebP images are supported.")
-    if declared_type and declared_type != detected_type:
-        frappe.throw("The image content does not match its declared file type.")
+
+    if declared_type and declared_type not in GENERIC_BINARY_TYPES:
+        if declared_type not in ALLOWED_IMAGE_TYPES:
+            frappe.throw("Only JPEG, PNG, and WebP images are supported.")
+        if declared_type != detected_type:
+            frappe.throw("The image content does not match its declared file type.")
 
     encoded = base64.b64encode(content).decode("ascii")
     return f"data:{detected_type};base64,{encoded}"

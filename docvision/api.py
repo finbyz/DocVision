@@ -1,6 +1,7 @@
 import frappe
 import json
 from frappe import _
+from docvision.telegram_bot.utils.country import resolve_country
 
 
 def get_customer_or_lead_by_email(email):
@@ -240,7 +241,7 @@ def create_contact(contact_data, party_type: str, party: str):
             address.city = address_data.get("city")
             address.state = address_data.get("state")
             address.pincode = address_data.get("pincode")
-            address.country = address_data.get("country")
+            address.country = resolve_country(address_data.get("country"), default="India")
             address.phone = next((phone.get("phone") for phone in data.get("phone_nos", []) if phone.get("is_primary_phone", 0) == 1), None)
             address.email_id = primary_email
             address.auto_created = True
@@ -274,7 +275,7 @@ def create_address(address_data, contact_name):
         "city": address_data.get("city", ""),
         "state": address_data.get("state", ""),
         "pincode": address_data.get("pincode", ""),
-        "country": address_data.get("country", ""),
+        "country": resolve_country(address_data.get("country"), default="India") or "",
         "links": [{
             "link_doctype": "Contact",
             "link_name": contact_name

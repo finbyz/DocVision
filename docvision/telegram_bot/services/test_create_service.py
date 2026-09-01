@@ -94,3 +94,25 @@ class TestCreateAddressForParty(TestCase):
         self.assertIsNone(get_doc.call_args.args[0]["state"])
         self.assertFalse(hasattr(address_doc.flags, "ignore_validate"))
         address_doc.insert.assert_called_once_with(ignore_permissions=True)
+
+    @patch("docvision.telegram_bot.services.create_service.frappe.get_doc")
+    def test_resolves_country_code_to_full_country_name(self, get_doc):
+        address_doc = MagicMock()
+        address_doc.flags = SimpleNamespace()
+        get_doc.return_value = address_doc
+        data = SimpleNamespace(
+            address=SimpleNamespace(
+                address_line1="100 Main St",
+                city="San Francisco",
+                state="California",
+                pincode="94105",
+                country="US",
+            )
+        )
+
+        result = create_address_for_party(data, "Lead", "LEAD-0001", "Example")
+
+        self.assertIs(result, address_doc)
+        self.assertEqual(get_doc.call_args.args[0]["country"], "United States")
+        address_doc.insert.assert_called_once_with(ignore_permissions=True)
+
