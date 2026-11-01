@@ -46,6 +46,8 @@ class TelegramSetting(Document):
                     telegram_response=remove_response.text,
                 )
             
+            from docvision.telegram_bot.webhook import webhook_secret
+
             webhook_url = self.get_webhook_url()
             
             if not webhook_url:
@@ -56,7 +58,7 @@ class TelegramSetting(Document):
                         
             set_response = requests.get(
                 f"https://api.telegram.org/bot{bot_token}/setWebhook",
-                params={"url": webhook_url},
+                params={"url": webhook_url, "secret_token": webhook_secret(bot_token)},
                 timeout=10
             )
             

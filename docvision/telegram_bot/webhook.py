@@ -2,15 +2,37 @@
 Main webhook handler for Telegram bot
 Entry point for all incoming Telegram messages
 """
+import hashlib
+import hmac
+
 import frappe
 from docvision.telegram_bot.handlers.message_handler import handle_private_message, handle_group_message
 from docvision.telegram_bot.services.telegram_service import send_telegram_message
 from docvision.telegram_bot.utils.logging import log_exception
 
 
+def webhook_secret(bot_token):
+    """Secret registered with Telegram's setWebhook and sent back by Telegram on every update.
+
+    Derived from the bot token so no extra setting is needed; changing the bot token
+    changes the secret (re-save Telegram Setting to register it again).
+    """
+    return hashlib.sha256(f"docvision-telegram-webhook:{bot_token}".encode()).hexdigest()
+
+
 @frappe.whitelist(allow_guest=True)
 def telegram_webhook():
-    """Main webhook endpoint for Telegram"""
+    """Main webhook endpoint for Telegram.
+
+    Only requests carrying Telegram's X-Telegram-Bot-Api-Secret-Token header with our
+    secret are processed, so nobody can forge updates by posting here directly.
+    """
+    bot_token = frappe.get_single("Telegram Setting").get_password("telegram_bot_token", raise_exception=False)
+    received = frappe.get_request_header("X-Telegram-Bot-Api-Secret-Token") or ""
+    if not bot_token or not hmac.compare_digest(received, webhook_secret(bot_token)):
+        frappe.local.response["http_status_code"] = 403
+        return {"status": "error", "message": "Forbidden"}
+
     chat_id = None
     update_id = None
 
@@ -48,28 +70,9 @@ def telegram_webhook():
 
 
 @frappe.whitelist()
-def setup_webhook_manual():
-    """Manual webhook setup via button click"""
-    try:
-        telegram_setting = frappe.get_single("Telegram Setting")
-        telegram_setting.setup_telegram_webhook()
-        
-        return {
-            "success": True,
-            "message": "Webhook setup triggered successfully"
-        }
-        
-    except Exception:
-        log_exception("Manual Webhook Setup Error")
-        return {
-            "success": False,
-            "message": "Unable to configure the webhook"
-        }
-
-
-@frappe.whitelist()
 def get_webhook_info():
-    """Get current webhook information for debugging"""
+    """Get current webhook information for debugging (needs write access to Telegram Setting)"""
+    frappe.has_permission("Telegram Setting", "write", throw=True)
     try:
         from docvision.telegram_bot.services.telegram_service import get_webhook_info as get_info
 
